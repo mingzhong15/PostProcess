@@ -11,7 +11,6 @@
 `Dataset.py`：训练集的分析和处理（结合dpdata使用）
 - 核心是`Class SingleSys()`，通过`_get_EOS`读入压强、体积、温度和密度信息
 - 数据的提取和整合
-- (待补充)原子环境特征空间分析
 
 `DPGenFlow.py`：DPGEN过程的全分析
 - 核心是`Calss DPGenSys()`，返回DPGEN的基本迭代、系统信息

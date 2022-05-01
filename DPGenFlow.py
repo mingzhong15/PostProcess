@@ -5,6 +5,9 @@ from monty.serialization import loadfn,dumpfn
 
 class DPGenSys():
     
+    # ========================================= #
+    # read basic information for DPGEN run
+    # ========================================= #
     def __init__(self, dpgen_dir):
         
         self.dir = dpgen_dir

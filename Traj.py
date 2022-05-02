@@ -27,7 +27,9 @@ class msstTraj():
     def _creat_label(self, prefix):
         self.label_list = []
         for output in self.thermo_list:
-            label = prefix+ output.split('/')[-1].split('.')[0].split('_')[-1]
+            #label = prefix+ output.split('/')[-1].split('.')[0].split('_')[-1]
+            
+            label = prefix + output.split('_')[-1][:-4]
             self.label_list.append(label)
 
     def _evolution_plot(self, INIT, END):

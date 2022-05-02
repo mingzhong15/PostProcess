@@ -7,6 +7,7 @@ class DPGenSys():
     
     # ========================================= #
     # read basic information for DPGEN run
+    # dpgen_dir : the working directory of DPGEN
     # ========================================= #
     def __init__(self, dpgen_dir):
         

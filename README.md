@@ -16,3 +16,8 @@
 - 核心是`Calss DPGenSys()`，返回DPGEN的基本迭代、系统信息
 - 返回训练曲线、模型偏差、相空间采样
 - 返回所有采样结果在PT上的分布
+
+`Traj.py`：处理msst的lammps轨迹，转化为vasp输入文件
+- 核心是`msst_traj()`，读入两个文件，一个是fix print输出的热力学量，一个是轨迹
+- 展示轨迹在热力学相空间的采样情况
+- 把lammps轨迹转化为vasp的INCAR,POSCAR,以用于打标签

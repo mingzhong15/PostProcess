@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 import glob
+import dpdata
 
 from monty.serialization import loadfn,dumpfn
 # ==================================== #
@@ -56,6 +57,32 @@ omega2k = s2ps*1/(c) *cm2m                # 1/ps -> 1/cm
 
 def _estimate_sel(rcut, num_rho):
     return 4/3 * np.pi * rcut**3 * num_rho
+
+def _plot_phonon(FILE, color, ll, lw, mk, INTERVAL, label):
+    
+    data = np.loadtxt(FILE)
+    nbranch = data.shape[1] - 1
+    
+    k_max = data[-1,0]
+
+    for i in range(1,nbranch+1):
+
+        inver_cm2THz = 1/omega2k
+        inver_cm2meV = 1/omega2k*s2ps*hbar*J2eV*1e3*2*np.pi
+        #INTERVAL = 5
+        if i == 1:
+            ax.plot(data[::INTERVAL,0]/k_max,data[::INTERVAL,i]*inver_cm2THz,ls=ll,marker=mk, 
+                    markersize=1.5, mew=0.5, color=color, linewidth=lw,  label=label)
+
+        else:
+            ax.plot(data[::INTERVAL,0]/k_max,data[::INTERVAL,i]*inver_cm2THz,ls=ll,marker=mk, 
+                    markersize=1.5, mew=0.5, color=color, linewidth=lw, )        
+              
+    k_path = data[::100,0]/k_max
+    
+    #ax.set_xlim(data[0,0],data[-1,0])
+        
+    return k_path      
 
 # ==================================== #
 #  Basic For Plot

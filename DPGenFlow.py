@@ -9,7 +9,7 @@ class DPGenSys():
     # read basic information for DPGEN run
     # dpgen_dir : the working directory of DPGEN
     # ========================================= #
-    def __init__(self, dpgen_dir):
+    def __init__(self, dpgen_dir, printf = True):
         
         self.dir = dpgen_dir
         self.param_file = os.path.join(dpgen_dir, 'param.json')
@@ -20,13 +20,15 @@ class DPGenSys():
         self.confs_list = self.jdata['sys_configs']
         self.label_list = []
         
+        self.printf = printf
+        
         print("DPGenerator System contains %.d Iterations"%(self.N_iter) )
         print("There are %.d initial configurations for exploration: \t "%(len(self.confs_list)) )
         for cc in self.confs_list:
             label = cc[0].split('.')[0]
             print(label,'\t\t')
             self.label_list.append(label)
-            
+
     
     def _learning_curve(self, iter_idx, model_idx=0):
         
@@ -115,13 +117,14 @@ class DPGenSys():
             ax.plot(self.press, self.temps, 
                 'o', color=color, alpha=0.4, mew=0.5, mfc='none',ms=3)   
         
-        output = 'Iter %.6d '%iter_idx
-        output += ' add %.d frames '%self.temps.shape[0]
-        output += '-- sys.%.3d '%sys_idx 
-        output += '(' + self.label_list[sys_idx] +')'
-        
-        print(output)
-        
+        if self.printf:
+            output = 'Iter %.6d '%iter_idx
+            output += ' add %.d frames '%self.temps.shape[0]
+            output += '-- sys.%.3d '%sys_idx 
+            output += '(' + self.label_list[sys_idx] +')'
+
+            print(output)
+
         ax.set_xlabel('Pressure (GPa)')
         ax.set_ylabel('Temperature (K)')
 
@@ -146,3 +149,40 @@ class DPGenSys():
                                            color=color[sys_idx])
                 except:
                     pass        
+
+    def _collect_data_to(self, out_dir, set_numb = 10000):
+        
+        for sys_idx in range(len(self.label_list)):
+
+            
+            file_list = glob.glob(os.path.join(self.dir, 'iter.*', '02.fp','data.%.3d'%sys_idx))
+
+            file_list.sort()
+            
+            print('Sys.%.3d is working, there are %.d sub-datasets '%(sys_idx, len(file_list)))
+            
+            fparam = []
+            ms = dpdata.MultiSystems()
+        
+            for file in file_list:
+
+                sys = dpdata.LabeledSystem( file, fmt='deepmd/raw' )
+                ms.append(sys)
+                
+                temps = np.loadtxt( os.path.join(file,'fparam.raw') )
+                fparam = np.append(fparam, temps)
+            
+            outdir_ss = os.path.join(out_dir, self.label_list[sys_idx])
+            os.mkdir( outdir_ss)
+            
+            ms.to_deepmd_raw(outdir_ss)
+            np.savetxt( os.path.join(outdir_ss, 'fparam.raw'), fparam)
+            
+            os.chdir(outdir_ss)
+            os.system('mv ./*/*.raw ./')
+            os.system('~/raw_to_set.sh %.d'%(set_numb))
+            
+            print('Sys.%.3d is done'%(sys_idx))
+            
+
+        

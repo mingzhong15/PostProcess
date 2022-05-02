@@ -1,5 +1,4 @@
 from Constant import *
-import dpdata
 
 class msstTraj():
     
@@ -24,13 +23,20 @@ class msstTraj():
         for file in file_list:
             print(file.split('/')[-1])
             
-    def _creat_label(self, prefix):
+    def _creat_label(self, prefix, mode='thermo'):
         self.label_list = []
-        for output in self.thermo_list:
-            #label = prefix+ output.split('/')[-1].split('.')[0].split('_')[-1]
+        
+        if mode == 'thermo':
+            for output in self.thermo_list:
+                label = prefix+ output.split('/')[-1].split('.')[0].split('_')[-1]
+                #label = prefix + output.split('_')[-1][:-4]
+                self.label_list.append(label)
+        elif mode == 'dump':
+            for output in self.dump_list:
+                label = prefix + output.split('/')[-1].split('.')[1]
+                #label = prefix + output.split('_')[-1][:-4]
+                self.label_list.append(label)
             
-            label = prefix + output.split('_')[-1][:-4]
-            self.label_list.append(label)
 
     def _evolution_plot(self, INIT, END):
         
@@ -68,10 +74,10 @@ class msstTraj():
         
         for i in range(len(self.label_list)):
             
-            out_dir = os.path.join(self.traj_dir, self.label_list[i])
+            work_dir = os.path.join(self.traj_dir, self.label_list[i])
             print(out_dir, ' is working')
             
-            os.system('mkdir '+out_dir)
+            os.system('mkdir '+work_dir)
             
             sys = dpdata.System(self.dump_list[i],fmt='lammps/dump',type_map=['C','H'])
             data = np.loadtxt(self.thermo_list[i], skiprows=1)
@@ -84,14 +90,43 @@ class msstTraj():
             print('%.d Configurations , %.d Thermodynamic results'%(Nf,Nt))
     
             for kk in range(Nt):
-                sys.to('vasp/poscar', os.path.join(out_dir, 'POSCAR.%.d'%kk), frame_idx=kk)
+                sys.to('vasp/poscar', os.path.join(work_dir, 'POSCAR.%.d'%kk), frame_idx=kk)
                 
-                incar_kk = os.path.join(out_dir,'INCAR.%.d'%kk)
+                incar_kk = os.path.join(work_dir,'INCAR.%.d'%kk)
                 os.system('cp '+os.path.join(self.traj_dir,'INCAR')+' '+ incar_kk)
                 os.system("sed -i 's/SIGMA = xx/SIGMA = %.10f/g' "%sigma[kk]+' '+incar_kk)
             
             print(self.label_list[i],' is done, %.d frames are added'%Nt)     
             
+    def _collect_data_to(self, out_dir):
+        
+        temps = []
+        ms = dpdata.MultiSystems()
+        
+        for i in range(len(self.label_list)):
+            
+            work_dir = os.path.join(self.traj_dir, self.label_list[i])
+            print(work_dir, ' is working')
+
+            data = np.loadtxt(self.thermo_list[i], skiprows=1)
+            temps = np.append(temps, data[:,1])
+            Nt = data.shape[0]
+            
+            for kk in range(Nt):
+                sys = dpdata.LabeledSystem( os.path.join(work_dir, '%.d'%kk, 'OUTCAR') )
+                ms.append(sys)
+                
+            print(self.label_list[i],' is done, %.d frames are collected'%Nt)  
+        
+        os.system('mkdir '+out_dir)
+        ms.to_deepmd_raw(out_dir)
+        
+        np.savetxt( os.path.join(out_dir,'fparam.raw'), temps)
+
+        os.chdir(out_dir)
+        os.system('mv ./C*/*.raw ./')
+        os.system('~/raw_to_set.sh 5000')
+    
 def _get_shock(DIR):
     
     data = np.loadtxt(DIR,skiprows=1)

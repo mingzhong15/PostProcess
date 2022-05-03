@@ -66,7 +66,7 @@ omega2k = s2ps*1/(c) *cm2m                # 1/ps -> 1/cm
 def _estimate_sel(rcut, num_rho):
     return 4/3 * np.pi * rcut**3 * num_rho
 
-def _plot_phonon(FILE, color, ll, lw, mk, INTERVAL, label):
+def _plot_phonon(FILE, ax, color, ll, lw, mk, INTERVAL, label):
     
     data = np.loadtxt(FILE)
     nbranch = data.shape[1] - 1

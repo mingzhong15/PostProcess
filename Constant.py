@@ -6,6 +6,8 @@ import glob
 import dpdata
 
 from monty.serialization import loadfn,dumpfn
+from scipy.optimize import curve_fit
+
 # ==================================== #
 #  Constants
 # ==================================== #
@@ -33,9 +35,15 @@ s2fs = 1e15
 
 cm2m = 1e-2
 gcc2kgm3 = 1e-3/(cm2m**3)
+
 bar2Pa = 1e5
 kbar2GPa = 1e3*bar2Pa/1e9
+Pa2GPa = 1e-9
 
+kg2g=1e3
+m2cm=1e2
+nm2A = 10
+mJ2J = 1e-3        
 # ==================================== #
 #  Atomic Units <---> Metal/S.I. Units
 # ==================================== #
@@ -93,3 +101,4 @@ sci_color = np.array(['#0C5DA5', '#00B945', '#FF9500', '#FF2C00', '#845B97', '#4
 def _gen_colormap(N, colormap=plt.cm.rainbow):
 
     return [colormap(int(x*colormap.N/N)) for x in range(N)]   
+

@@ -276,10 +276,15 @@ class TTMSys():
 
         print('Intensity (eV/A^2 ps): ', self.I_abs)
         print('laser pulse (ps): ', self.sigma)
-    def _plot_TE_evolution(self, ax, DELTA):
+        
+    def _get_TE_evolution_centroid(self, DELTA):
 
         self.TE_AVE = np.average(self.TE[:, self.l_surface + int(self.N_grid/2) - DELTA : self.l_surface + int(self.N_grid/2) + DELTA], axis=1 )
         self.TI_AVE = np.average(self.TI[:, self.l_surface + int(self.N_grid/2) - DELTA : self.l_surface + int(self.N_grid/2) + DELTA], axis=1 )
+    
+    def _plot_TE_evolution(self, ax, DELTA):
+
+        self._get_TE_evolution_centroid(DELTA)
 
         ax.plot(self.times, self.TE_AVE,'-', mfc='none',mew=0.5, 
                 linewidth=1.0, label='$T_e$ (bulk)')

@@ -12,8 +12,14 @@
 - 核心是`Class SingleSys()`，通过`_get_EOS`读入压强、体积、温度和密度信息
 - 数据的筛选
 
+`DPFlow.py`：训练和测试的Fenix
+- 核心是`class DPSys()`
+- 绘制训练曲线
+- 返回`dp test`之后关于能量、受力和压强的偏差
+- 查看相空间上的预测偏差
+
 `DPGenFlow.py`：DPGEN过程的全分析
-- 核心是`Calss DPGenSys()`，返回DPGEN的基本迭代、系统信息
+- 核心是`Class DPGenSys()`，返回DPGEN的基本迭代、系统信息
 - 返回训练曲线、模型偏差、相空间采样
 - 返回所有采样结果在PT上的分布
 - collect所有数据（包含`fparam.raw`）

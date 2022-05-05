@@ -56,8 +56,9 @@ class DPGenSys():
         path = os.path.join(self.dir,iter_idx, '01.model_devi', task_idx, 'input.lammps')
 
         temp = float(os.popen("grep ' TEMP ' " + path).readlines()[0].split()[-1])
+        ele_temp = float(os.popen("grep ' ELE_TEMP ' " + path).readlines()[0].split()[-1])
         press = float(os.popen("grep ' PRES ' " + path).readlines()[0].split()[-1]) * bar2Pa /1e9
-        return temp, press
+        return temp, ele_temp, press, 
     
     def _sampling(self, iter_idx, sys_idx = 0):
         
@@ -86,21 +87,27 @@ class DPGenSys():
             ax[idx].set_title(ll_list[idx])
             ax[idx].set_xlabel('stopbatch')
             
-    def _plot_md(self, ax, iter_idx, sys_idx = 0, case_idx = 0):
+    def _plot_md(self, ax, iter_idx, sys_idx = 0, case_idx = 0, show_ele_temp = False):
         
         lo= self.jdata['model_devi_f_trust_lo']
         hi= self.jdata['model_devi_f_trust_hi']
 
         data = self._model_devi(iter_idx, sys_idx , case_idx)
         
-        t,p = self._get_PT(iter_idx, sys_idx , case_idx)
+        t,te,p = self._get_PT(iter_idx, sys_idx , case_idx)
         
         ax.plot(data[:,0],data[:,4],'o', mfc='none',mew=0.5,ms=2)
         
         ax.axhline(lo,linestyle='--',lw=0.5,color='k')
         ax.axhline(hi,linestyle='--',lw=0.5,color='k')  
         
-        ax.set_title('T = %.d K, p = %.2f GPa, '%(t,p)+self.label_list[sys_idx])
+        output = 'T_i = %.d K'%t
+        if show_ele_temp:
+            output += 'T_e = %.d K'%te
+        output += ' p = %.2f GPa, '%p
+        output += self.label_list[sys_idx]
+        
+        ax.set_title(output, fontsize=8)
 
         ax.set_ylabel('model_devi ($\\rm{eV/\mathring A}$)')
         ax.set_xlabel('timestep')
@@ -150,6 +157,25 @@ class DPGenSys():
                 except:
                     pass        
 
+            
+    def _obtain_tt_te_sampling(self):
+        
+        input_list = glob.glob( os.path.join(self.dir, 'iter.*', '01.model_devi', 'task*', 'input.lammps') )
+
+        tt = []
+        te = []
+
+        for path in input_list:
+            temp = float(os.popen("grep ' TEMP ' " + path).readlines()[0].split()[-1])
+            ele_temp = float(os.popen("grep ' ELE_TEMP ' " + path).readlines()[0].split()[-1])
+            #press = float(os.popen("grep ' PRES ' " + path).readlines()[0].split()[-1]) * bar2Pa /1e9
+
+            tt = np.append(tt, temp)
+            te = np.append(te, ele_temp)
+            
+        return tt,te
+        
+                
     def _collect_data_to(self, out_dir, set_numb = 10000):
         
         for sys_idx in range(len(self.label_list)):

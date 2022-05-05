@@ -66,7 +66,33 @@ omega2k = s2ps*1/(c) *cm2m                # 1/ps -> 1/cm
 def _estimate_sel(rcut, num_rho):
     return 4/3 * np.pi * rcut**3 * num_rho
 
-def _plot_phonon(FILE, ax, color, ll, lw, mk, INTERVAL, label):
+def _get_RMSE(x,y):
+    
+    return np.sqrt((x-y)**2)
+
+# ==================================== #
+#  Basic For Plot
+# ==================================== #
+
+sci_color = np.array(['#0C5DA5', '#00B945', '#FF9500', '#FF2C00', '#845B97', '#474747', '#9e9e9e'])
+
+def _gen_colormap(N, colormap=plt.cm.rainbow):
+
+    return [colormap(int(x*colormap.N/N)) for x in range(N)]   
+
+def parity_plot(ax, data_dft, data_dp, INTERVAL):
+
+    ax.plot(data_dft[::INTERVAL], data_dp[::INTERVAL],'o',ms=1)
+
+    vmin = np.min(data_dft)
+    vmax = np.max(data_dft)
+
+    x1 = np.linspace(vmin,vmax)
+    ax.plot(x1,x1,'--k', lw=1)
+    ax.set_xlim(vmin,vmax)
+    ax.set_ylim(vmin,vmax)
+
+def phonon_plot(FILE, ax, color, ll, lw, mk, INTERVAL, label):
     
     data = np.loadtxt(FILE)
     nbranch = data.shape[1] - 1
@@ -90,15 +116,4 @@ def _plot_phonon(FILE, ax, color, ll, lw, mk, INTERVAL, label):
     
     #ax.set_xlim(data[0,0],data[-1,0])
         
-    return k_path      
-
-# ==================================== #
-#  Basic For Plot
-# ==================================== #
-
-sci_color = np.array(['#0C5DA5', '#00B945', '#FF9500', '#FF2C00', '#845B97', '#474747', '#9e9e9e'])
-
-def _gen_colormap(N, colormap=plt.cm.rainbow):
-
-    return [colormap(int(x*colormap.N/N)) for x in range(N)]   
-
+    return k_path 

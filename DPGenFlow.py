@@ -115,7 +115,7 @@ class DPGenSys():
         
     def _plot_sampling(self, ax, iter_idx,  sys_idx = 0, color='dodgerblue', is_label=False, label=''):
         
-        self.temps, self.press, self.vol, self.energy = self._sampling(iter_idx, sys_idx)
+        self.temps, self.press, self.vol, self.energy, self.natoms = self._sampling(iter_idx, sys_idx)
 
         if is_label:
             ax.plot(self.press, self.temps, 

@@ -7,7 +7,7 @@ import dpdata
 
 from monty.serialization import loadfn,dumpfn
 from scipy.optimize import curve_fit
-
+from scipy.signal import savgol_filter
 # ==================================== #
 #  Constants
 # ==================================== #
@@ -70,13 +70,60 @@ def _get_RMSE(x,y):
     
     return np.sqrt((x-y)**2)
 
+def radial_average_2d(x,y):
+    
+    x_uniq = np.unique(x)
+    y_rave = np.zeros(x_uniq.shape)
+    
+    for i in range(x_uniq.shape[0]):
+        xi = x_uniq[i]
+        y_rave[i] = np.sum(y[x == xi])
+    
+    return x_uniq, y_rave
+
+def chunk_average(x, y, N):
+    
+    x_chunk = np.linspace(x.min(), x.max(), N)
+    y_chunk = np.zeros(x_chunk.shape)
+    for i in range(N-1):
+        ll = x_chunk[i]
+        rr = x_chunk[i+1]
+        
+        cri1 = x > ll
+        cri2 = x < rr
+        y_chunk[i] = np.average(y[cri1 * cri2])
+    
+    return x_chunk, y_chunk
+
+def chunk_sum(x, y, N):
+    
+    x_chunk = np.linspace(x.min(), x.max(), N)
+    y_chunk = np.zeros(x_chunk.shape)
+    for i in range(N-1):
+        ll = x_chunk[i]
+        rr = x_chunk[i+1]
+        
+        cri1 = x > ll
+        cri2 = x < rr
+        y_chunk[i] = np.sum(y[cri1 * cri2])
+    
+    return x_chunk, y_chunk
+
+def trapezoidal(x,y):
+
+    delta = x[1:]-x[:-1]
+    n = y.shape[0] - 1
+    
+    height = (y[1:]+y[:-1])/2
+    
+    return np.sum(delta*height)
 # ==================================== #
 #  Basic For Plot
 # ==================================== #
 
 sci_color = np.array(['#0C5DA5', '#00B945', '#FF9500', '#FF2C00', '#845B97', '#474747', '#9e9e9e'])
 
-def _gen_colormap(N, colormap=plt.cm.rainbow):
+def generate_colormap(N, colormap=plt.cm.rainbow):
 
     return [colormap(int(x*colormap.N/N)) for x in range(N)]   
 

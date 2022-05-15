@@ -1,31 +1,37 @@
 from Constant import *
 
-class msstTraj():
+
+class lammpsTraj():
     
-    def __init__(self, traj_dir, printf = True):
+    def __init__(self, traj_dir, output_prefix, dump_prefix, printf = True, mode='msst'):
         
         self.traj_dir = traj_dir
-        self.thermo_list = glob.glob( os.path.join(traj_dir, 'output_*'))
+        self.thermo_list = glob.glob( os.path.join(traj_dir, output_prefix))
         self.thermo_list.sort()
+        
+        self.mode = mode
         
         if printf:
             print('%.d thermo file found :'%(len(self.thermo_list)))
             self._print_list(self.thermo_list)
-                
-        self.dump_list = glob.glob( os.path.join(traj_dir, 'dump.*'))
+            
+        self.dump_list = glob.glob( os.path.join(traj_dir, dump_prefix))
         self.dump_list.sort()
         
         if printf:
             print('%.d dump file found :'%(len(self.dump_list)))
-            self._print_list(self.dump_list)
+            self._print_list(self.dump_list)                
 
     def _print_list(self, file_list):
+        
+        skip = len(self.traj_dir)
         for file in file_list:
-            print(file.split('/')[-1])
-            
+            #print(file.split('/')[-1])    
+            print(file[skip:])
+    
     def _creat_label(self, prefix, mode='thermo'):
         self.label_list = []
-        
+
         if mode == 'thermo':
             for output in self.thermo_list:
                 label = prefix+ output.split('/')[-1].split('.')[0].split('_')[-1]
@@ -36,23 +42,27 @@ class msstTraj():
                 label = prefix + output.split('/')[-1].split('.')[1]
                 #label = prefix + output.split('_')[-1][:-4]
                 self.label_list.append(label)
-            
+        elif mode == 'dirs':
+            for output in self.dump_list:
+                label = prefix + output.split('/')[-2].split('.')[-1]
+                #label = prefix + output.split('_')[-1][:-4]
+                self.label_list.append(label)
 
-    def _evolution_plot(self, INIT, END):
+    def _evolution_plot(self, INIT, END, delta_t=1):
         
         fig, ax = plt.subplots(2,1,figsize=(3,4),dpi=200)
 
-        for i in range(len(self.label_list)):
+        for idx in range(len(self.label_list)):
 
-            times, temps, press = _get_shock(self.thermo_list[i])
+            times, temps, press = _get_thermo(self.thermo_list[idx], self.mode, delta_t)
 
             i = 0
-            ax[i].plot(times[INIT:END], temps[INIT:END], label=self.label_list[i])
+            ax[i].plot(times[INIT:END], temps[INIT:END], label=self.label_list[idx])
             ax[i].set_ylabel('Temperature (k)')
 
             i = 1
             ax[i].plot(times[INIT:END], press[INIT:END])
-            ax[i].set_ylabel('Preussure (GPa)')
+            ax[i].set_ylabel('Pressure (GPa)')
 
             ax[i].set_xlabel('Time (ps)')
 
@@ -60,30 +70,31 @@ class msstTraj():
 
         ax[0].legend(fontsize=8)
         
-    def _sampling_plot(self, ax, INIT, END, INTERVAL, prefix):
+    def _sampling_plot(self, ax, INIT, END, INTERVAL, prefix, delta_t=1):
         
-        for i in range(len(self.label_list)):
-            times, temps, press = _get_shock(self.thermo_list[i])
+        for idx in range(len(self.label_list)):
+            times, temps, press = _get_thermo(self.thermo_list[idx], self.mode, delta_t)
+            
             print(times.shape)
             
             ax.plot(press[INIT:END:INTERVAL], temps[INIT:END:INTERVAL], 'o', 
-            ms=3, alpha=0.5, mew=0.5,label=prefix+self.label_list[i])
-            print(press[INIT:END:INTERVAL].shape)
+            ms=3, alpha=0.5, mew=0.5,label=prefix+self.label_list[idx])
             
-    def _generate_vasp(self):
+            print(press[INIT:END:INTERVAL].shape)     
+            
+    def _generate_vasp(self, type_map):
         
         for i in range(len(self.label_list)):
             
             work_dir = os.path.join(self.traj_dir, self.label_list[i])
-            print(out_dir, ' is working')
+            print(work_dir, ' is working')
             
             os.system('mkdir '+work_dir)
             
-            sys = dpdata.System(self.dump_list[i],fmt='lammps/dump',type_map=['C','H'])
-            data = np.loadtxt(self.thermo_list[i], skiprows=1)
+            sys = dpdata.System(self.dump_list[i],fmt='lammps/dump',type_map=type_map)
             
-            temps = data[:,1]
-            sigma = data[:,1]*kb*J2eV
+            times, temps, press = _get_thermo(self.thermo_list[i], self.mode, delta_t=1)
+            sigma = temps*kb*J2eV
             Nf = sys.get_nframes()
             Nt = temps.shape[0]
             
@@ -108,9 +119,9 @@ class msstTraj():
             work_dir = os.path.join(self.traj_dir, self.label_list[i])
             print(work_dir, ' is working')
 
-            data = np.loadtxt(self.thermo_list[i], skiprows=1)
-            temps = np.append(temps, data[:,1])
-            Nt = data.shape[0]
+            times, tt, press = _get_thermo(self.thermo_list[i], self.mode, delta_t=1)
+            temps = np.append(temps, tt)
+            Nt = tt.shape[0]
             
             for kk in range(Nt):
                 sys = dpdata.LabeledSystem( os.path.join(work_dir, '%.d'%kk, 'OUTCAR') )
@@ -126,12 +137,22 @@ class msstTraj():
         os.chdir(out_dir)
         os.system('mv ./C*/*.raw ./')
         os.system('~/raw_to_set.sh 5000')
-    
-def _get_shock(DIR):
+            
+            
+def _get_thermo(DIR, mode='msst', delta_t=1):
     
     data = np.loadtxt(DIR,skiprows=1)
     
-    temps = data[:,1]
-    press = data[:,4]*bar2Pa/1e9
+    if mode == 'msst':
+        temps = data[:,1]
+        press = data[:,4]*bar2Pa/1e9
     
-    return data[:,0],temps, press
+        return data[:,0],temps, press
+
+    elif mode == 'npt':
+
+        temps = data[:,0]
+        press = data[:,1]*bar2Pa/1e9
+        times = np.arange(temps.shape[0]) * delta_t
+        
+        return times, temps, press      

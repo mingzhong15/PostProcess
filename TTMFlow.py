@@ -11,23 +11,20 @@ def _fit_it(data, init, end):
     
     p_est, err_est = curve_fit(_heat_capacity, data[init:end,0], data[init:end,1])
     
-
-def _obtain_Q6(DIR):
-
-    data_profile = np.loadtxt(DIR + '/cut.profile')
-    N_chunk = int(np.max(data_profile[:,0]))
-
-    temps = np.array( data_profile[:,4].reshape(-1,N_chunk)  )
-    press = np.array( data_profile[:,5].reshape(-1,N_chunk) /1e4 )
-    ncount = np.array( data_profile[:,2].reshape(-1,N_chunk) )
-    rho = np.array( data_profile[:,3].reshape(-1,N_chunk) )
-    Q6 = np.array( data_profile[:,7].reshape(-1,N_chunk) )
-
-    times = np.arange(temps.shape[0])*delta_t
-    coords = data_profile[:,1].reshape(-1,N_chunk)[0]/10
-    X,Y = np.meshgrid(times, coords)
+def _cut_profile(DIR):
     
-    return Q6,rho   
+    file = open(DIR+'/MD.profile','r')
+    outfile = open(DIR+'/cut.profile','w')
+
+    lines =file.readlines()
+
+    for line in lines:
+
+        if len(line.split()) == 9:
+            outfile.writelines(line)
+
+    file.close()
+    outfile.close()
 
 class TTMSys():
     
@@ -112,6 +109,7 @@ class TTMSys():
 
         print('Intensity (eV/A^2 ps): ', self.I_abs)
         print('laser pulse (ps): ', self.sigma)
+        
     def _plot_laser(self):
         t = np.linspace(0, self.sigma*10, 100)
         t_0 = 5 * self.sigma
@@ -127,15 +125,15 @@ class TTMSys():
         ax.set_xlabel('Time (fs)')
         ax.set_ylabel('Intensity $\\rm{eV/(\mathring A^2 \cdot ps)}$)')
         
-    def _fit_capacity(self, file, end, init):
+    def _fit_capacity(self, data, end, init):
         
-        compare_root = '/data/home/djy4/compare/tungsten/'
-
-        data = np.loadtxt(compare_root+file)
-        data[:,0] /= 1e3 
+        #compare_root = '/data/home/djy4/compare/tungsten/'
+        #data = np.loadtxt(file)
+        #data = np.loadtxt(compare_root+file)
+        #data[:,0] /= 1e3 
         
         fig, ax = plt.subplots(figsize=(2,2),dpi=200)
-        ax.plot(data[:,0],data[:,1],'-',color='r',mfc='none',mew=0.5, linewidth=1.0, label='Lin 2008')
+        ax.plot(data[:,0],data[:,1],'-',color='r',mfc='none',mew=0.5, linewidth=1.0, label='Raw Data')
         ax.plot(data[:,0],data[:,0]* 1e3* 137.3,':',color='k',mfc='none',mew=0.5, linewidth=1.0, label='FEG')
         
         # ======== lower fit ========== #
@@ -151,14 +149,15 @@ class TTMSys():
         # ======== higher fit ========== #
         p_est, err_est = curve_fit(_heat_capacity, data[init:,0], data[init:,1])
         self.h_esheat = p_est * J2eV /(m2A**3)
-        X = np.linspace(data[init,0],25,100)
+        X = np.linspace(data[init,0], data[-1,0],100)
         Ce_fit = _heat_capacity(X, *p_est)
         ax.plot(X, Ce_fit,':',color='cyan',mfc='none',mew=0.5, linewidth=2.5, label='PolyFit (High)')
 
         print('high temperature (a1-a4): ',p_est * J2eV /(m2A**3) )
         ax.legend(fontsize=6)
-        ax.set_xlim(0,25)
-        ax.set_ylim(0,35*1e5)
+        #ax.set_xlim(0, data[-1,0])
+        ax.set_xlim(0,20)
+        ax.set_ylim(0,np.max(data[:,1]))
         ax.set_ylabel('$C_e$ ($J/(m^3\cdot K)$)',fontsize=8)
         ax.set_xlabel('Temperature ($10^3K$)',fontsize=8)
         
@@ -281,33 +280,44 @@ class TTMSys():
 
         self.TE_AVE = np.average(self.TE[:, self.l_surface + int(self.N_grid/2) - DELTA : self.l_surface + int(self.N_grid/2) + DELTA], axis=1 )
         self.TI_AVE = np.average(self.TI[:, self.l_surface + int(self.N_grid/2) - DELTA : self.l_surface + int(self.N_grid/2) + DELTA], axis=1 )
+        
+        self.TI_STD = np.std(self.TI[:, self.l_surface + int(self.N_grid/2) - DELTA : self.l_surface + int(self.N_grid/2) + DELTA], axis=1 ) 
     
-    def _plot_TE_evolution(self, ax, DELTA):
+
+    
+    def _plot_TE_evolution(self, ax, DELTA, show_error=False):
 
         self._get_TE_evolution_centroid(DELTA)
 
         ax.plot(self.times, self.TE_AVE,'-', mfc='none',mew=0.5, 
                 linewidth=1.0, label='$T_e$ (bulk)')
-        ax.plot(self.times, self.TI_AVE,'-', mfc='none',mew=0.5, 
+        
+        if show_error:
+            ax.errorbar(self.times, self.TI_AVE, yerr=self.TI_STD, fmt='-o',mew=0.5, ms=2,
+                linewidth=1.0, label='$T_i$ (bulk)')            
+        else:
+            ax.plot(self.times, self.TI_AVE,'-', mfc='none',mew=0.5, 
                 linewidth=1.0, label='$T_i$ (bulk)')
 
     def _plot_spatial(self,):
         
         X,Y = np.meshgrid(self.times, self.coords)
-
         fig,ax = plt.subplots(figsize=(3,2),dpi=200) 
-
+        delta_x = 15
+        
         cs = ax.contourf(X, Y, self.TE.T, 20,  cmap=plt.cm.Spectral_r)
         plt.colorbar(cs,label='$T_e$ (K)')
         ax.set_ylabel('Depth (nm)')
         ax.set_xlabel('Time (ps)')
-
+        ax.set_ylim(0-delta_x, 30+delta_x)
+        
         fig,ax = plt.subplots(figsize=(3,2),dpi=200) 
         cs = ax.contourf(X, Y, self.TI.T, 20,  cmap=plt.cm.Spectral_r)
         plt.colorbar(cs,label='$T_i$ (K)')
         ax.set_ylabel('Depth (nm)')
         ax.set_xlabel('Time (ps)')
-        
+ 
+        ax.set_ylim(0-delta_x, 30+delta_x)
     
     def _read_profile(self, DIR, delta_t):
 
@@ -315,23 +325,62 @@ class TTMSys():
 
         N_chunk = int(np.max(data_profile[:,0]))
 
+        self.coords = data_profile[:,1].reshape(-1,N_chunk)[0]/10    
+        self.ncount = np.array( data_profile[:,2].reshape(-1,N_chunk) )
+        self.rho = np.array( data_profile[:,3].reshape(-1,N_chunk) )
         self.temps = np.array( data_profile[:,4].reshape(-1,N_chunk)  )
-        self.press = np.array( data_profile[:,5].reshape(-1,N_chunk) /1e4 )
-        ncount = np.array( data_profile[:,2].reshape(-1,N_chunk) )
-        rho = np.array( data_profile[:,3].reshape(-1,N_chunk) )
-        Q6 = np.array( data_profile[:,7].reshape(-1,N_chunk) )
+        self.press = - np.array( data_profile[:,5].reshape(-1,N_chunk) /1e4 )
+        self.Q4 = np.array( data_profile[:,6].reshape(-1,N_chunk) )
+        self.Q6 = np.array( data_profile[:,7].reshape(-1,N_chunk) )
+        self.Q8 = np.array( data_profile[:,8].reshape(-1,N_chunk) )
 
-        times = np.arange(self.temps.shape[0])*delta_t
-        coords = data_profile[:,1].reshape(-1,N_chunk)[0]/10
-        X,Y = np.meshgrid(times, coords)
+        self.times = np.arange(self.temps.shape[0])*delta_t
 
-    def _plot_PT(self, ax, DELTA, INTERVAL, color, label):
+        self.X,self.Y = np.meshgrid(self.times, self.coords)
         
+    def _get_centroid(self, data, DELTA):
         center = int((self.l_surface+self.r_surface)/2)
+        
+        return np.average(data[:, center - DELTA : center + DELTA], axis=1 )
+    
+    def _get_surface(self, data, DELTA):
+        
+        data_front = []
+        data_rear = []
+
+        for i in range(self.TE.shape[0]):
+            
+            idx_f = int(self.front[i])
+            idx_r = int(self.rear[i])
+            
+            data_front = np.append(data_front, np.average(data[i, idx_f :idx_f+DELTA]) )
+            data_rear = np.append(data_rear, np.average(data[i, idx_r-DELTA:idx_r ]) )
+        
+        return data_front, data_rear
+        
+    def _get_boundary(self):
+        
+        self.front = []
+        self.rear = []
+        
+        for i in range(self.TE.shape[0]):
+            
+            idx_f = np.argwhere(self.TE[i]!=0)[0][0]
+            idx_r = np.argwhere(self.TE[i]!=0)[-1][0]
+
+            self.front = np.append(self.front, idx_f)
+            self.rear = np.append(self.rear, idx_r)
+
+        self.front.astype(int)
+        self.rear.astype(int)
+
+        
+    def _plot_PT(self, ax,  INTERVAL, color, label):
+        
         DELTA = 2
 
-        self.temps_c = np.average(self.temps[:, center - DELTA : center + DELTA], axis=1 )
-        self.press_c = np.average(self.press[:, center - DELTA : center + DELTA], axis=1 )
+        self.temps_c = self._get_centroid(self.temps, DELTA)
+        self.press_c = self._get_centroid(self.press, DELTA)
 
         ax.plot( self.press_c[::INTERVAL], self.temps_c[::INTERVAL],
-            'o',color=color,mew=0.5,alpha=0.4,ms=4,label=label)   
+            'o',color=color,mew=0.5,alpha=0.6, ms=4,label=label)   

@@ -1,6 +1,49 @@
 from Constant import *
 
+def dump_to_xyz(FILE, OUTFILE):
 
+    file = open(FILE, 'r')
+    outfile = open(OUTFILE, 'w')
+
+    line = file.readline()
+
+    while line:
+
+        if 'NUMBER OF ATOMS' in line:
+            line = file.readline()
+            natoms = int(line)
+            outfile.write(line)
+
+        if 'BOX BOUNDS' in line:
+            line = file.readline()
+
+            #print(line.split())
+            xl, xh = line.split()
+            ret ='%.11f 0 0 \t'%(float(xh) - float(xl))
+            ret += '0 %.11f 0 \t'%(float(xh) - float(xl))
+            ret += '0 0 %.11f\n'%(float(xh) - float(xl))
+
+            outfile.write(ret)
+
+        if 'ATOMS' in line:
+
+            for i in range(natoms):
+                line = file.readline()
+
+                output = line.split()[1:]
+
+                idx = int(output[0])
+                x = float(output[1])
+                y = float(output[2])
+                z = float(output[3])
+
+                outfile.write('%.d %.11f %.11f %.11f \n'%(idx,x,y,z))
+
+        line = file.readline()
+    
+    file.close()
+    outfile.close()
+    
 class lammpsTraj():
     
     def __init__(self, traj_dir, output_prefix, dump_prefix, printf = True, mode='msst'):

@@ -42,7 +42,6 @@ Pa2GPa = 1e-9
 
 kg2g=1e3
 m2cm=1e2
-nm2A = 10
 mJ2J = 1e-3        
 # ==================================== #
 #  Atomic Units <---> Metal/S.I. Units
@@ -122,6 +121,14 @@ def trapezoidal(x,y):
 # ==================================== #
 
 sci_color = np.array(['#0C5DA5', '#00B945', '#FF9500', '#FF2C00', '#845B97', '#474747', '#9e9e9e'])
+
+cc_matrix = np.array([
+    ['#FD6D5A', '#FEB40B', '#6DC354', '#994487', '#518CD8', '#443295'],
+    ['#264653', '#2A9D8F', '#E9C46A', '#F4A261', '#E76F51', '#253777'],
+    ['#4C87D6', '#F38562', '#F2B825', '#D4C114', '#88B421', '#199FE0'],
+    ['#037CD2', '#00AAAA', '#927FD3', '#E54E5D', '#EAA700', '#F57F4B'],
+]
+)
 
 def generate_colormap(N, colormap=plt.cm.rainbow):
 

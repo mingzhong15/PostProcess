@@ -3,14 +3,15 @@ from Constant import radial_average_2d, chunk_average
 
 class SingleSAED():
     
-    def __init__(self, FILE):
+    def __init__(self, FILE, is_print=True):
 
         file = os.popen('grep DIMENSIONS '+FILE)
         tt = file.readlines()[0].split()
         Nx = int(tt[1])
         Ny = int(tt[2])
         Nz = int(tt[3])
-        print(Nx,Ny,Nz)   
+        if is_print:
+            print(Nx,Ny,Nz)   
         self.L = np.array([Nx,Ny,Nz])
 
         file = os.popen('grep ASPECT_RATIO '+FILE)
@@ -51,9 +52,14 @@ class SingleSAED():
         self.z = temp[2].reshape(-1,1)
         self.intensity = self.data.reshape(-1,1)
         
-    def _get_radius_intensity(self, is_thres = False, thres = 1e3):
+    def _get_radius_intensity(self, is_cut = False, DELTA = 10, is_thres = False, thres = 1e3):
     
         self._get_2d_intensity()
+        
+        if is_cut:
+            mid = int(self.intensity.shape[0]/2)+1
+            self.intensity[mid-DELTA:mid+DELTA,:] = 0
+            self.intensity[:, mid-DELTA:mid+DELTA] = 0
         
         R = ( np.sqrt(self.X1**2 + self.X2**2) ).reshape(-1,1)
         

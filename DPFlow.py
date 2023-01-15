@@ -11,9 +11,13 @@ class DPSys():
         
     def _plot_lc(self, ax, label, is_vali = False):
         
-        lc_file = os.path.join(self.dir, 'lc.train.out')
-        data = np.loadtxt(lc_file)
-
+        try:
+            lc_file = os.path.join(self.dir, 'lc.train.out')
+            data = np.loadtxt(lc_file)
+        except:
+            lc_file = os.path.join(self.dir, 'lcurve.out')
+            data = np.loadtxt(lc_file)
+            
         ll_list = ['Energy (eV)','Force (eV/$\\rm{\mathring A}$)','Virial (eV)']
         
         if not is_vali:
@@ -30,7 +34,7 @@ class DPSys():
                 ax[idx].set_title(ll_list[idx])
                 ax[idx].set_xlabel('stopbatch')
     
-    def _read_dp_test(self, prefix, SET_DIR, natoms):
+    def _read_dp_test(self, prefix, SET_DIR, natoms, is_print=False):
 
         self.prefix = prefix
         try:
@@ -39,21 +43,22 @@ class DPSys():
         except:
             self.natoms = natoms
             
-        self._read_energy_test()
-        self._read_force_test()
-        self._read_virial_test() 
+        self._read_energy_test(is_print)
+        self._read_force_test(is_print)
+        self._read_virial_test(is_print) 
 
         
-    def _read_energy_test(self):
+    def _read_energy_test(self, is_print):
         self.energy = np.loadtxt( os.path.join(self.dir, self.prefix+'.e.out') )/self.natoms
         
         E_rmse = np.sqrt((self.energy[:,1] - self.energy[:,0] )**2)
         
         self.E_rmse_ave = np.average(E_rmse)
         
-        print('RMSE of energy per natom is %.5f eV'%self.E_rmse_ave)
+        if is_print:
+            print('RMSE of energy per natom is %.5f eV'%self.E_rmse_ave)
         
-    def _read_force_test(self):
+    def _read_force_test(self, is_print):
 
         force = np.loadtxt( os.path.join(self.dir, self.prefix+'.f.out'))
 
@@ -70,15 +75,18 @@ class DPSys():
                          (force[:,2] - force[:,5])**2 )
 
         self.f_rmse_ave = np.average(f_rmse)
-        print('RMSE of force is %.5f eV/Angstrom'%self.f_rmse_ave)
+        
+        if is_print:
+            print('RMSE of force is %.5f eV/Angstrom'%self.f_rmse_ave)
         
         conf_ave_f_norm_std = np.std(self.norm_dft.reshape(-1,self.natoms),axis=1)
         conf_ave_f_rmse = np.average(f_rmse.reshape(-1,self.natoms),axis=1)
 
         self.rrmse = conf_ave_f_rmse/conf_ave_f_norm_std * 100
-        print('RMSE/STD of force is %.2f '%np.average(self.rrmse)+'%')
+        if is_print:
+            print('RMSE/STD of force is %.2f '%np.average(self.rrmse)+'%')
     
-    def _read_virial_test(self):
+    def _read_virial_test(self, is_print):
         virials = np.loadtxt(os.path.join(self.dir, self.prefix+'.v.out')) 
         
         self.alg_dft = (virials[:,0] + virials[:,4] + virials[:,8])/3
@@ -88,22 +96,26 @@ class DPSys():
             self.p_dp = self.alg_dp/(self.vol*self.natoms)/J2eV * (m2A**3) *1e-9
             
             self.p_rmse = np.sqrt((self.p_dft-self.p_dp)**2)
-            print('RMSE of pressure is %.5f GPa'%np.average(self.p_rmse))
+            self.p_rmse_ave = np.average(self.p_rmse)
+            if is_print:
+                print('RMSE of pressure is %.5f GPa'%self.p_rmse_ave)
         except:         
             
             self.v_rmse =  np.sqrt((self.alg_dft-self.alg_dp)**2)
-            print('RMSE of virial is %.5f eV'%np.average(self.v_rmse))
+            self.v_rmse_ave = np.average(self.v_rmse)
+            if is_print:
+                print('RMSE of virial is %.5f eV'%self.v_rmse_ave)
 
-    def _plot_pred_parity(self, ax):
+    def _plot_pred_parity(self, ax, INTERVAL = 1, cl='dodgerblue'):
 
         idx = 0
-        parity_plot(ax[idx], self.energy[:,0],self.energy[:,1], INTERVAL = 1)
+        parity_plot(ax[idx], self.energy[:,0],self.energy[:,1], INTERVAL = INTERVAL, cl=cl)
         ax[idx].set_xlabel('$E_{DFT}/atom\ ({\\rm eV})$',fontsize=10)  
         ax[idx].set_ylabel('$E_{DP}/atom\ ({\\rm eV})$',fontsize=10)  
-        ax[idx].set_title('$\sigma_E$ = %.4f eV'%self.E_rmse_ave,fontsize=10)  
+        ax[idx].set_title('$\sigma_E$ = %.4f eV/atom'%self.E_rmse_ave,fontsize=10)  
 
         idx = 1
-        parity_plot(ax[idx], self.norm_dft,self.norm_dp, INTERVAL = 1)
+        parity_plot(ax[idx], self.norm_dft,self.norm_dp, INTERVAL =  INTERVAL, cl=cl)
         ax[idx].set_xlabel('$f_{DFT}\ ({\\rm eV/\mathring A})$',fontsize=10)  
         ax[idx].set_ylabel('$f_{DP}\ ({\\rm eV/\mathring A})$',fontsize=10)  
         ax[idx].set_title('$\sigma_f$ = %.4f ${\\rm eV/\mathring A}$'%self.f_rmse_ave,fontsize=10)  
@@ -111,12 +123,12 @@ class DPSys():
         idx = 2
 
         try:
-            parity_plot(ax[idx], self.p_dft,self.p_dp, INTERVAL = 1)
+            parity_plot(ax[idx], self.p_dft,self.p_dp, INTERVAL =  INTERVAL, cl=cl)
             ax[idx].set_xlabel('$p_{DFT}\ ({\\rm GPa})$',fontsize=10)  
             ax[idx].set_ylabel('$p_{DP}\ ({\\rm GPa})$',fontsize=10)  
             ax[idx].set_title('$\sigma_p$ = %.4f GPa'%np.average(self.p_rmse),fontsize=10)  
         except:
-            parity_plot(ax[idx], self.alg_dft,self.alg_dp, INTERVAL = 1)
+            parity_plot(ax[idx], self.alg_dft,self.alg_dp, INTERVAL =  INTERVAL, cl=cl)
             ax[idx].set_xlabel('$v_{DFT}\ ({\\rm eV})$',fontsize=10)  
             ax[idx].set_ylabel('$v_{DP}\ ({\\rm eV})$',fontsize=10)  
             ax[idx].set_title('$\sigma_v$ = %.4f eV'%np.average(self.v_rmse),fontsize=10)  

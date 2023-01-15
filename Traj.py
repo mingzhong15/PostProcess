@@ -1,48 +1,48 @@
 from Constant import *
 
-def dump_to_xyz(FILE, OUTFILE):
+# def dump_to_xyz(FILE, OUTFILE):
 
-    file = open(FILE, 'r')
-    outfile = open(OUTFILE, 'w')
+#     file = open(FILE, 'r')
+#     outfile = open(OUTFILE, 'w')
 
-    line = file.readline()
+#     line = file.readline()
 
-    while line:
+#     while line:
 
-        if 'NUMBER OF ATOMS' in line:
-            line = file.readline()
-            natoms = int(line)
-            outfile.write(line)
+#         if 'NUMBER OF ATOMS' in line:
+#             line = file.readline()
+#             natoms = int(line)
+#             outfile.write(line)
 
-        if 'BOX BOUNDS' in line:
-            line = file.readline()
+#         if 'BOX BOUNDS' in line:
+#             line = file.readline()
 
-            #print(line.split())
-            xl, xh = line.split()
-            ret ='%.11f 0 0 \t'%(float(xh) - float(xl))
-            ret += '0 %.11f 0 \t'%(float(xh) - float(xl))
-            ret += '0 0 %.11f\n'%(float(xh) - float(xl))
+#             #print(line.split())
+#             xl, xh = line.split()
+#             ret ='%.11f 0 0 \t'%(float(xh) - float(xl))
+#             ret += '0 %.11f 0 \t'%(float(xh) - float(xl))
+#             ret += '0 0 %.11f\n'%(float(xh) - float(xl))
 
-            outfile.write(ret)
+#             outfile.write(ret)
 
-        if 'ATOMS' in line:
+#         if 'ATOMS' in line:
 
-            for i in range(natoms):
-                line = file.readline()
+#             for i in range(natoms):
+#                 line = file.readline()
 
-                output = line.split()[1:]
+#                 output = line.split()[1:]
 
-                idx = int(output[0])
-                x = float(output[1])
-                y = float(output[2])
-                z = float(output[3])
+#                 idx = int(output[0])
+#                 x = float(output[1])
+#                 y = float(output[2])
+#                 z = float(output[3])
 
-                outfile.write('%.d %.11f %.11f %.11f \n'%(idx,x,y,z))
+#                 outfile.write('%.d %.11f %.11f %.11f \n'%(idx,x,y,z))
 
-        line = file.readline()
+#         line = file.readline()
     
-    file.close()
-    outfile.close()
+#     file.close()
+#     outfile.close()
     
 class lammpsTraj():
     
@@ -72,7 +72,7 @@ class lammpsTraj():
             #print(file.split('/')[-1])    
             print(file[skip:])
     
-    def _creat_label(self, prefix, mode='thermo'):
+    def _create_label(self, prefix, mode='thermo'):
         self.label_list = []
 
         if mode == 'thermo':
@@ -85,6 +85,12 @@ class lammpsTraj():
                 label = prefix + output.split('/')[-1].split('.')[1]
                 #label = prefix + output.split('_')[-1][:-4]
                 self.label_list.append(label)
+        elif mode == 'traj':
+            for output in self.dump_list:
+                label = prefix + output.split('/')[-2].split('-')[-1]
+                #label = prefix + output.split('_')[-1][:-4]
+                self.label_list.append(label)
+            
         elif mode == 'dirs':
             for output in self.dump_list:
                 label = prefix + output.split('/')[-2].split('.')[-1]
@@ -125,7 +131,7 @@ class lammpsTraj():
             
             print(press[INIT:END:INTERVAL].shape)     
             
-    def _generate_vasp(self, type_map):
+    def _generate_vasp(self, type_map, skip_mid=False, skip_loc=100):
         
         for i in range(len(self.label_list)):
             
@@ -138,19 +144,25 @@ class lammpsTraj():
             
             times, temps, press = _get_thermo(self.thermo_list[i], self.mode, delta_t=1)
             sigma = temps*kb*J2eV
+            
+            if skip_mid:
+                if temps.shape[0] > skip_loc :
+                    temps = np.delete(temps, skip_loc)
+                    
+            
             Nf = sys.get_nframes()
             Nt = temps.shape[0]
             
             print('%.d Configurations , %.d Thermodynamic results'%(Nf,Nt))
     
-            for kk in range(Nt):
+            for kk in range(Nf):
                 sys.to('vasp/poscar', os.path.join(work_dir, 'POSCAR.%.d'%kk), frame_idx=kk)
                 
                 incar_kk = os.path.join(work_dir,'INCAR.%.d'%kk)
                 os.system('cp '+os.path.join(self.traj_dir,'INCAR')+' '+ incar_kk)
                 os.system("sed -i 's/SIGMA = xx/SIGMA = %.10f/g' "%sigma[kk]+' '+incar_kk)
             
-            print(self.label_list[i],' is done, %.d frames are added'%Nt)     
+            print(self.label_list[i],' is done, %.d frames are added'%Nf)     
             
     def _collect_data_to(self, out_dir):
         
@@ -161,16 +173,30 @@ class lammpsTraj():
             
             work_dir = os.path.join(self.traj_dir, self.label_list[i])
             print(work_dir, ' is working')
-
-            times, tt, press = _get_thermo(self.thermo_list[i], self.mode, delta_t=1)
-            temps = np.append(temps, tt)
-            Nt = tt.shape[0]
             
-            for kk in range(Nt):
-                sys = dpdata.LabeledSystem( os.path.join(work_dir, '%.d'%kk, 'OUTCAR') )
-                ms.append(sys)
+            dft_list = glob.glob( os.path.join(work_dir,'*') )
+            
+           #for kk in range(Nt):
+                #sys = dpdata.LabeledSystem( os.path.join(work_dir, '%.d'%kk, 'OUTCAR') )
+                   
+            kk = 0
+            for dft_calc in dft_list : 
+                try:
+                    sys = dpdata.LabeledSystem( os.path.join(dft_calc, 'OUTCAR') )
+                    
+                    if sys.get_nframes() >0:
+                        tt = float(os.popen('grep SIGMA '+os.path.join(dft_calc, 'INCAR')).readlines()[0].split()[-2]) /(kb*J2eV)
+
+                        temps = np.append(temps,tt)
+                        ms.append(sys)
+
+                        kk += 1
+                except:
+                    #print(dft_calc,' is empty')
+                    pass
+                       
                 
-            print(self.label_list[i],' is done, %.d frames are collected'%Nt)  
+            print(self.label_list[i],' is done, %.d frames are collected'%kk)  
         
         os.system('mkdir '+out_dir)
         ms.to_deepmd_raw(out_dir)

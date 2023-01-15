@@ -28,11 +28,15 @@ class SingleSys():
         self.path = path
         self.temps, self.press, self.vol, self.energy, self.natoms = _get_EOS(self.path)
         
+    def _read_force(self):
+        
+        self.force = np.loadtxt(os.path.join(self.path, 'force.raw'))
+    
     def _show_plot(self, ax, INTERVAL, INIT, color, label):
         #print('Number of Frames: %.d'%self.press.shape[0])#([self.press<=thres][::INTERVAL].shape[0])
         
         ax.plot(self.press[INIT::INTERVAL], self.temps[INIT::INTERVAL], 
-                'o', color=color,alpha=0.4, mew=0.5, ms=3, label=label)
+                'o', color=color,alpha=0.4, mew=0.5, ms=3, mfc='none',label=label)
    
     def _filter_plot(self, ax, thres, prefix, INTERVAL, color, label):
         
@@ -47,7 +51,31 @@ class SingleSys():
         
             ax.plot(self.press[self.temps<=thres][::INTERVAL], self.temps[self.temps<=thres][::INTERVAL],
                     'o', color=color,alpha=0.4, mew=0.5, mfc='none',ms=3, label=label)    
+ 
+    def cri_filter_all(self, cri, INTERVAL, OUT_DIR):
+        
+        if not os.path.exists(OUT_DIR):
+            os.mkdir(OUT_DIR)
             
+        for prefix in ['box','coord','energy','force','fparam','virial']:
+            CAT_FILE= os.path.join(self.path, prefix+'.raw') 
+            OUT_FILE= os.path.join(OUT_DIR, prefix+ '.raw')
+
+            data = np.loadtxt(CAT_FILE)
+
+            filter_data = data[cri][::INTERVAL]
+
+            print(data.shape,' -->',filter_data.shape)
+
+            np.savetxt(OUT_FILE, filter_data)
+            print(OUT_FILE + ' is done \n')
+            
+        os.chdir(self.path)
+        os.system('cp type.raw type_map.raw '+ OUT_DIR)
+        
+        os.chdir(OUT_DIR)
+        os.system('~/raw_to_set.sh 50000')
+                    
     def _filter_all(self, thres, filter_prefix, INTERVAL, OUT_DIR):
         
         if not os.path.exists(OUT_DIR):

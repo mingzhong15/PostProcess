@@ -47,34 +47,42 @@ class TTMSys():
         
         print('density %.2f g/cm^3'%(self.rho * kg2g/(m2cm**3)))
         
-    def set_system_size(self, L):
+    def set_system_size(self, L, mode='free',delta =3.55, min_act = 80):
         
         self.L = L
         
-        r_verlet = 6.10 + 1.0     # unit: angstrom
-
+        #r_verlet = 6.10 + 1.0     # unit: angstrom
+        #delta = r_verlet / 2
+        
         self.Nx = int(self.L * 10 /self.a ) + 1
-
-        delta = r_verlet / 2
 
         self.N_grid = int(L * 10 / delta) +1
 
-        print('Lattice :',self.Nx, delta, '\nGrid for FD :', self.N_grid, self.N_grid * 3)
+        self.boundary_mode = mode
+        if self.boundary_mode == 'free':
+            self.N_expand = 3
+        elif self.boundary_mode == 'substrate':
+            self.N_expand = 2
+            
+        print('Lattice : ',self.Nx, delta, '\nGrid for FD :', 
+              self.N_grid, self.N_grid * self.N_expand)
 
         self.l_surface = int(self.N_grid)
         self.r_surface = int(self.N_grid*2-1) 
 
-        print('left Surface: ',self.l_surface, self.r_surface)        
+        self.coords = np.arange(self.N_grid*self.N_expand) * delta /10 - L
+
+                    
+        print('left Surface: %.d \n right Surface: %.d \n'%(self.l_surface, self.r_surface))        
         
-        self.coords = np.arange(self.N_grid*3) * delta /10 - L
-        
+        self.min_act = min_act
     # ==================================== #
     #  Generate input script
     # ==================================== #     
     
     def _generate_init_TE_grid(self, savedir, T_0):
         
-        grid_x = np.arange(self.N_grid * 3).astype(int)
+        grid_x = np.arange(self.N_grid * self.N_expand).astype(int)
 
         T_init = np.vstack( (grid_x, np.zeros(grid_x.shape), np.zeros(grid_x.shape), np.zeros(grid_x.shape) ))
 
@@ -88,18 +96,61 @@ class TTMSys():
         
         np.savetxt(savedir+'TTM_init.dat',TE_field, delimiter='   ', fmt='%.d')
         
-    def _obtain_gamma(self, G):
+    def _obtain_gamma(self, G0, data, init, const=False):
+        
+        print('=====================================')
+        print('e-ph coupling setting starts')
+        
         
         # unit : kg/s
-        gamma_p_SI = self.mass  /(3 * self.num_rho * kb) * G      
+        gamma_p_SI = self.mass  /(3 * self.num_rho * kb) * G0      
         self.gamma_p_metal = gamma_p_SI * kg2gmol / s2ps
         
-        print('e-p coupling: ',self.gamma_p_metal, 'g/mol / ps')
+        print('e-p coupling (G0): ',self.gamma_p_metal, 'g/mol / ps')
+        
+        
+        fig, ax = plt.subplots(figsize=(2,2),dpi=200)
+        ax.plot(data[:,0],data[:,1],'-',color='silver',mfc='none',mew=0.5, linewidth=1.0, label='Raw Data')
+        
+        gei_metal = self.mass  /(3 * self.num_rho * kb) * data[:,1] * kg2gmol / s2ps    
+        # ======== higher fit ========== #
+        
+        
+        if const:
+            self.thres_G = 100
+        else:
+            self.thres_G = data[init,0]
+        
+        p_est, err_est = curve_fit(_heat_capacity, data[init:,0], gei_metal[init:]) #data[init:,1])
+        self.gp = p_est #self.mass  /(3 * self.num_rho * kb) * p_est * kg2gmol / s2ps
+        
+        X = np.linspace(data[init,0], data[-1,0],100)
+        gamma_fit = _heat_capacity(X, *p_est)
+        gei_fit =  gamma_fit / (kg2gmol / s2ps) * (3 * self.num_rho * kb)  / self.mass  
+        
+        ax.plot(X, gei_fit,':',color='blue',mfc='none',mew=0.5, linewidth=1.5, label='PolyFit (High)')
 
-
-    def _obtain_laser(self, tau_L, epsilon=0, F_abs=0):
+        if const:
+            print('constant G0 is set')
+        else:
+            print('above %.4f 10^3 K '%self.thres_G,'high temperature (a1-a4): ', self.gp )
+        ax.legend(fontsize=6)
+        ax.set_xlim(0, data[-1,0])
+        #ax.set_xlim(0,30)
+        ax.set_ylim(0,np.max(data[:,1]))
+        ax.set_ylabel('$g_{ei}$ ($W/(m^3\cdot K)$)',fontsize=8)
+        ax.set_xlabel('Temperature ($10^3K$)',fontsize=8)
+  
+        print('e-ph coupling setting ends')
+        print('=====================================')
+        
+        
+        return ax
+        
+    def _obtain_laser(self, tau_L, epsilon=0, F_abs=0, is_print=True):
         # Gaussian width, unit: ps
         self.sigma = tau_L / np.sqrt(8 * np.log(2))  
+
         
         if epsilon !=0 :
             I_abs_SI = epsilon * self.rho * self.L * nm2A / m2A / np.sqrt(2*np.pi) / self.sigma
@@ -107,9 +158,10 @@ class TTMSys():
         elif F_abs !=0 :
             self.I_abs = F_abs / const_I / tau_L * J2eV / (m2A**2)
 
-        print('Intensity (eV/A^2 ps): ', self.I_abs)
-        print('laser pulse (ps): ', self.sigma)
-        
+        if is_print:
+            print('Intensity (eV/A^2 ps): ', self.I_abs)
+            print('laser pulse (ps): ', self.sigma)
+
     def _plot_laser(self):
         t = np.linspace(0, self.sigma*10, 100)
         t_0 = 5 * self.sigma
@@ -126,44 +178,50 @@ class TTMSys():
         ax.set_ylabel('Intensity $\\rm{eV/(\mathring A^2 \cdot ps)}$)')
         
     def _fit_capacity(self, data, end, init):
-        
-        #compare_root = '/data/home/djy4/compare/tungsten/'
-        #data = np.loadtxt(file)
-        #data = np.loadtxt(compare_root+file)
-        #data[:,0] /= 1e3 
-        
-        fig, ax = plt.subplots(figsize=(2,2),dpi=200)
-        ax.plot(data[:,0],data[:,1],'-',color='r',mfc='none',mew=0.5, linewidth=1.0, label='Raw Data')
-        ax.plot(data[:,0],data[:,0]* 1e3* 137.3,':',color='k',mfc='none',mew=0.5, linewidth=1.0, label='FEG')
+
+        self.Ce_data = data
+        self.Ce_end = end
+        self.Ce_init = init
         
         # ======== lower fit ========== #
         p_est, err_est = curve_fit(_heat_capacity, data[:end,0], data[:end,1])
         self.temp_thres = data[init,0]
         self.esheat = p_est * J2eV /(m2A**3)
         
-        X = np.linspace(0,data[init,0],100)
-        Ce_fit = _heat_capacity(X, *p_est)
-        ax.plot(X, Ce_fit,':',color='b',mfc='none',mew=0.5, linewidth=2.5, label='PolyFit (Low)')
         print('X < %.2f '%data[init,0],'low temperature (a1-a4): ',p_est * J2eV /(m2A**3))
 
         # ======== higher fit ========== #
         p_est, err_est = curve_fit(_heat_capacity, data[init:,0], data[init:,1])
         self.h_esheat = p_est * J2eV /(m2A**3)
-        X = np.linspace(data[init,0], data[-1,0],100)
-        Ce_fit = _heat_capacity(X, *p_est)
-        ax.plot(X, Ce_fit,':',color='cyan',mfc='none',mew=0.5, linewidth=2.5, label='PolyFit (High)')
-
         print('high temperature (a1-a4): ',p_est * J2eV /(m2A**3) )
+    
+    def _plot_capacity(self):
+                
+        fig, ax = plt.subplots(figsize=(2,2),dpi=200)
+        ax.plot(self.Ce_data[:,0],self.Ce_data[:,1],'-',color='silver',
+                mew=1.5, linewidth=1.0, label='Raw Data')
+        
+        X = np.linspace(0,self.Ce_data[self.Ce_init,0],100)
+        Ce_fit = _heat_capacity(X, *self.esheat/J2eV*(m2A**3))
+        ax.plot(X, Ce_fit,'-',color='navy',mfc='none',mew=0.5, linewidth=0.5, label='PolyFit (Low)')
+
+        X = np.linspace(self.Ce_data[self.Ce_init,0], self.Ce_data[-1,0],100)
+        Ce_fit = _heat_capacity(X, *self.h_esheat/J2eV*(m2A**3))
+        
+        ax.plot(X, Ce_fit,'-',color='crimson',mfc='none',mew=0.5, linewidth=0.5, label='PolyFit (High)')
+
         ax.legend(fontsize=6)
-        #ax.set_xlim(0, data[-1,0])
-        ax.set_xlim(0,20)
-        ax.set_ylim(0,np.max(data[:,1]))
+        ax.set_xlim(0, self.Ce_data[-1,0])
+        #ax.set_xlim(0,30)
+        ax.set_ylim(0,np.max(self.Ce_data[:,1]))
         ax.set_ylabel('$C_e$ ($J/(m^3\cdot K)$)',fontsize=8)
         ax.set_xlabel('Temperature ($10^3K$)',fontsize=8)
         
-    def _generate_param(self, savedir):
+        return ax    
+        
+    def _generate_param(self, savedir, savefile):
 
-        file = open(savedir+'parameter.txt','w')
+        file = open( os.path.join(savedir,savefile),'w')
         
         # == part 1. low temperautre C_e polyfit == #
         file.writelines(' =========== [*esheat_0] =========== # \n')
@@ -193,8 +251,19 @@ class TTMSys():
         temp = 0.0
         file.writelines('%.1f \n'%temp)
         
-        file.writelines(' =========== [*gamma_p] =========== # \n')
+        file.writelines(' =========== [*gamma_0] =========== # \n')
         file.writelines('%.32f \n'%self.gamma_p_metal)             
+        file.writelines(' =========== [*thres_G] =========== # \n')
+        file.writelines('%.32f \n'%self.thres_G)                 
+        file.writelines(' =========== [*gp_1] =========== # \n')
+        file.writelines('%.32f \n'%self.gp[0])
+        file.writelines(' =========== [*gp_2] =========== # \n')
+        file.writelines('%.32f \n'%self.gp[1])
+        file.writelines(' =========== [*gp_3] =========== # \n')
+        file.writelines('%.32f \n'%self.gp[2])     
+        file.writelines(' =========== [*gp_4] =========== # \n')
+        file.writelines('%.32f \n'%self.gp[3])         
+        
         file.writelines(' =========== [gamma_s] =========== # \n')
         temp = 0.0
         file.writelines('%.1f \n'%temp)          
@@ -232,7 +301,7 @@ class TTMSys():
         temp = 1
         file.writelines('%.d \n'%temp)  
         file.writelines(' =========== *minimum to activate new grid=========== # \n')
-        temp = 40
+        temp = self.min_act
         file.writelines('%.d \n'%temp)      
         
         # == part 1. high temperautre C_e polyfit == #        
@@ -257,11 +326,21 @@ class TTMSys():
     def _read_TTM_out(self, DIR, delta_t):
         data = np.loadtxt(DIR+'/TTM_out.dat')  #  max_rows=4000
         
-        self.TI = data[:,1:self.N_grid*3+1]
-        self.TE = data[:,self.N_grid*3+1:]
+        self.TI = data[:,1:self.N_grid*self.N_expand+1]
+        self.TE = data[:,self.N_grid*self.N_expand+1:]
         self.times = np.arange(self.TE.shape[0])*delta_t - 5*self.sigma
         
-        print(np.max(self.TE[:,self.l_surface]))
+        mask = np.ma.masked_equal(self.TI, 0)
+        self.TI_min = np.ma.min(mask, axis=1).data
+        self.TI_max = np.ma.max(mask, axis=1).data
+        self.TI_ave = np.ma.mean(mask, axis=1).data
+        
+        mask = np.ma.masked_equal(self.TE, 0)
+        self.TE_min = np.ma.min(mask, axis=1).data
+        self.TE_max = np.ma.max(mask, axis=1).data
+        self.TE_ave = np.ma.mean(mask, axis=1).data
+        
+        print(np.max(self.TE_max))
         
     def _obtain_laser(self, tau_L, epsilon=0, F_abs=0):
         # Gaussian width, unit: ps
@@ -284,7 +363,6 @@ class TTMSys():
         self.TI_STD = np.std(self.TI[:, self.l_surface + int(self.N_grid/2) - DELTA : self.l_surface + int(self.N_grid/2) + DELTA], axis=1 ) 
     
 
-    
     def _plot_TE_evolution(self, ax, DELTA, show_error=False):
 
         self._get_TE_evolution_centroid(DELTA)
@@ -302,7 +380,7 @@ class TTMSys():
     def _plot_spatial(self,):
         
         X,Y = np.meshgrid(self.times, self.coords)
-        fig,ax = plt.subplots(figsize=(3,2),dpi=200) 
+        fig,ax = plt.subplots(figsize=(2,2),dpi=200) 
         delta_x = 15
         
         cs = ax.contourf(X, Y, self.TE.T, 20,  cmap=plt.cm.Spectral_r)
@@ -311,7 +389,7 @@ class TTMSys():
         ax.set_xlabel('Time (ps)')
         ax.set_ylim(0-delta_x, 30+delta_x)
         
-        fig,ax = plt.subplots(figsize=(3,2),dpi=200) 
+        fig,ax = plt.subplots(figsize=(2,2),dpi=200) 
         cs = ax.contourf(X, Y, self.TI.T, 20,  cmap=plt.cm.Spectral_r)
         plt.colorbar(cs,label='$T_i$ (K)')
         ax.set_ylabel('Depth (nm)')
@@ -332,7 +410,7 @@ class TTMSys():
         self.press = - np.array( data_profile[:,5].reshape(-1,N_chunk) /1e4 )
         self.Q4 = np.array( data_profile[:,6].reshape(-1,N_chunk) )
         self.Q6 = np.array( data_profile[:,7].reshape(-1,N_chunk) )
-        self.Q8 = np.array( data_profile[:,8].reshape(-1,N_chunk) )
+        #self.Q8 = np.array( data_profile[:,8].reshape(-1,N_chunk) )
 
         self.times = np.arange(self.temps.shape[0])*delta_t
 

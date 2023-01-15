@@ -14,6 +14,10 @@ class SingleSAED():
             print(Nx,Ny,Nz)   
         self.L = np.array([Nx,Ny,Nz])
 
+        self.axis_ave = np.where(self.L==1)[0][0]
+        self.x1_idx = np.where(self.L!=1)[0][0]
+        self.x2_idx = np.where(self.L!=1)[0][1]
+        
         file = os.popen('grep ASPECT_RATIO '+FILE)
         tt = file.readlines()[0].split()
         dx = float(tt[1])
@@ -30,13 +34,14 @@ class SingleSAED():
         
         raw_data = np.loadtxt(FILE,skiprows=10)
         self.data = raw_data.reshape(self.L)
-
-    def _get_2d_intensity(self, x1_idx=1, x2_idx =2):
+        
+        
+    def _get_2d_intensity(self):
     
-        self.intensity = np.sum(self.data, axis=0)
+        self.intensity = np.average(self.data, axis=self.axis_ave)
 
-        grid_x1 = np.arange( self.L[x1_idx] )* self.dL[x1_idx] + self.L0[x1_idx]
-        grid_x2 = np.arange( self.L[x2_idx] )* self.dL[x2_idx] + self.L0[x2_idx]
+        grid_x1 = np.arange( self.L[self.x1_idx] )* self.dL[self.x1_idx] + self.L0[self.x1_idx]
+        grid_x2 = np.arange( self.L[self.x2_idx] )* self.dL[self.x2_idx] + self.L0[self.x2_idx]
         self.X1, self.X2 = np.meshgrid(grid_x1, grid_x2)
 
 
@@ -51,25 +56,47 @@ class SingleSAED():
         self.y = temp[1].reshape(-1,1)
         self.z = temp[2].reshape(-1,1)
         self.intensity = self.data.reshape(-1,1)
+  
+    def _get_radius_intensity(self, init_r = 0.2, N=200):
         
-    def _get_radius_intensity(self, is_cut = False, DELTA = 10, is_thres = False, thres = 1e3):
-    
         self._get_2d_intensity()
         
-        if is_cut:
-            mid = int(self.intensity.shape[0]/2)+1
-            self.intensity[mid-DELTA:mid+DELTA,:] = 0
-            self.intensity[:, mid-DELTA:mid+DELTA] = 0
+        Z = np.array(self.intensity)
+        R = ( np.sqrt(self.X1**2 + self.X2**2) )
+
+        self.radius = np.linspace(init_r, np.max(R), N)
+        self.int_r = np.zeros(N)
         
-        R = ( np.sqrt(self.X1**2 + self.X2**2) ).reshape(-1,1)
+        for i in range(N-1):
+    
+            r = self.radius[i]
+            r_dr = self.radius[i+1]
+            dr = r_dr - r
+
+            left= (R>r)
+            right = (R<=r_dr)
+            cri = (left & right)
+
+            self.int_r[i] = np.sum(Z[cri])/(2*np.pi*r*dr)
+    
+#     def _get_radius_intensity(self, is_cut = False, DELTA = 10, is_thres = False, thres = 1e3):
+    
+#         self._get_2d_intensity()
         
-        temp_int = self.intensity.reshape(-1,1)
-        temp_int[temp_int == -1] = 0
+#         if is_cut:
+#             mid = int(self.intensity.shape[0]/2)+1
+#             self.intensity[mid-DELTA:mid+DELTA,:] = 0
+#             self.intensity[:, mid-DELTA:mid+DELTA] = 0
         
-        if is_thres:
-            temp_int[temp_int > thres] = thres
+#         R = ( np.sqrt(self.X1**2 + self.X2**2) ).reshape(-1,1)
         
-        self.radius, self.int_r = radial_average_2d(R, temp_int )
+#         temp_int = self.intensity.reshape(-1,1)
+#         temp_int[temp_int == -1] = 0
+        
+#         if is_thres:
+#             temp_int[temp_int > thres] = thres
+        
+#         self.radius, self.int_r = radial_average_2d(R, temp_int )
         
 
 # def plot_2d_ele_frac(self, ax, thres, kmax):

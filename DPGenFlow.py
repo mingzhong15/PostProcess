@@ -15,7 +15,8 @@ class DPGenSys():
         self.param_file = os.path.join(dpgen_dir, 'param.json')
         self.jdata =loadfn(self.param_file)
         
-        self.N_iter = len(glob.glob( os.path.join( dpgen_dir ,'iter.*' )))
+        #self.N_iter = len(glob.glob( os.path.join( dpgen_dir ,'iter.*' )))
+        self.N_iter = len(self.jdata['model_devi_jobs'])
         
         self.confs_list = self.jdata['sys_configs']
         self.label_list = []
@@ -176,12 +177,12 @@ class DPGenSys():
         return tt,te
         
                 
-    def _collect_data_to(self, out_dir, set_numb = 10000):
+    def _collect_data_to(self, out_dir, set_numb = 20000, prefix=''):
         
         for sys_idx in range(len(self.label_list)):
 
             
-            file_list = glob.glob(os.path.join(self.dir, 'iter.*', '02.fp','data.%.3d'%sys_idx))
+            file_list = glob.glob(os.path.join(self.dir, 'iter.*', '02.fp', prefix+'data.%.3d'%sys_idx))
             file_list.sort()
             
             print('Sys.%.3d is working, there are %.d sub-datasets '%(sys_idx, len(file_list)))
@@ -214,4 +215,7 @@ class DPGenSys():
             print('Sys.%.3d is done'%(sys_idx))
             
 
+    #def _extract_internal_energy(self):
+        
+        
         

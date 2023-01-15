@@ -8,6 +8,10 @@ import dpdata
 from monty.serialization import loadfn,dumpfn
 from scipy.optimize import curve_fit
 from scipy.signal import savgol_filter
+
+plt.rcParams['xtick.direction'] = 'in'
+plt.rcParams['ytick.direction'] = 'in'
+
 # ==================================== #
 #  Constants
 # ==================================== #
@@ -22,6 +26,7 @@ kb = 1.38e-23                            # Boltzmann constant, J/K
 aB = 4*np.pi*epsilon0*hbar**2 / (me*e**2)# Bohr radius, m
 Ry = 13.6                                # Ryberg, eV
 
+cal2J = 4.184 
 # ==================================== #
 #  Metal Units <---> S.I. Units
 # ==================================== #
@@ -43,6 +48,9 @@ Pa2GPa = 1e-9
 kg2g=1e3
 m2cm=1e2
 mJ2J = 1e-3        
+
+nm2A = 10
+
 # ==================================== #
 #  Atomic Units <---> Metal/S.I. Units
 # ==================================== #
@@ -134,9 +142,10 @@ def generate_colormap(N, colormap=plt.cm.rainbow):
 
     return [colormap(int(x*colormap.N/N)) for x in range(N)]   
 
-def parity_plot(ax, data_dft, data_dp, INTERVAL):
+def parity_plot(ax, data_dft, data_dp, INTERVAL, cl):
 
-    ax.plot(data_dft[::INTERVAL], data_dp[::INTERVAL],'o',ms=1)
+    ax.plot(data_dft[::INTERVAL], data_dp[::INTERVAL],'o',color=cl,
+            ms=2, mew=0.5)
 
     vmin = np.min(data_dft)
     vmax = np.max(data_dft)
@@ -171,3 +180,49 @@ def phonon_plot(FILE, ax, color, ll, lw, mk, INTERVAL, label):
     #ax.set_xlim(data[0,0],data[-1,0])
         
     return k_path 
+
+def dump_to_xyz(FILE, OUTFILE):
+
+    file = open(FILE, 'r')
+    outfile = open(OUTFILE, 'w')
+
+    line = file.readline()
+
+    while line:
+
+        if 'NUMBER OF ATOMS' in line:
+            line = file.readline()
+            natoms = int(line)
+            outfile.write(line)
+
+        if 'BOX BOUNDS' in line:
+             
+            for kk in range(3):           
+                line = file.readline()
+
+                xl, xh = line.split()
+
+                ret = '%.11f %.11f '%(float(xl),float(xh))
+
+                outfile.write(ret)
+
+            outfile.write('\n')    
+            
+        if 'ATOMS' in line:
+
+            for i in range(natoms):
+                line = file.readline()
+
+                output = line.split()[1:]
+
+                #idx = int(output[0])
+                x = float(output[1])
+                y = float(output[2])
+                z = float(output[3])
+
+                outfile.write('%.11f %.11f %.11f \n'%(x,y,z))
+
+        line = file.readline()
+    
+    file.close()
+    outfile.close()

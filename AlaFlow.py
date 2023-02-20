@@ -24,7 +24,7 @@ class AlaSys():
 
         self.pattern_type = 'lammps'
         
-    def _generate_lammps_input(self, nx, model_type, model_file, in_type, strain = 1.0, fparam=300):
+    def _generate_lammps_input(self, nx, model_type, model_file, in_type, strain = 1.0, fparam=0, aparam=0):
         
         output_acc = '%20.12f'
         
@@ -36,6 +36,7 @@ class AlaSys():
         self.natoms = self.nx**3*self.natoms_uc
         self.strain = strain
         self.fparam = fparam
+        self.aparam = aparam
         
         # ======= basic ======== #
         ret=''
@@ -60,7 +61,14 @@ class AlaSys():
 
         # ======= potential ====== #
         if model_type == 'dp':
-            ret+='pair_style      deepmd '+model_file+' fparam %.d \n'%fparam
+            
+            if fparam != 0:
+                print('using fparam : %.d'%fparam)
+                ret+='pair_style      deepmd '+model_file+' fparam %.d \n'%fparam
+            elif aparam != 0:
+                print('using aparam : %.d'%aparam)
+                ret+='pair_style      deepmd '+model_file+' aparam %.d \n'%aparam
+            
             ret+='pair_coeff      * *\n'
             ret+='mass            1 %.2f\n'%self.mass_mole
 
@@ -144,7 +152,7 @@ class AlaSys():
                                   fmt='lammps/lmp', type_map=[self.element])
             frame.to('vasp/poscar', self.DIR+self.prefix+'.POSCAR')
 
-    def _generate_alm_input(self, calc_type, k_path='', extra=''):
+    def _generate_alm_input(self, calc_type, k_path='', generatal_extra='', analysis_extra=''):
 
         outfile = 'alm_'+calc_type+'.in'
         self.alm_type = calc_type
@@ -172,7 +180,8 @@ class AlaSys():
             ret += '  FCSXML = '+self.element+'_harmo.xml\n'
             
             
-        ret += extra
+        ret += generatal_extra
+        
         
         ret += '  NKD = 1\n'
         ret += '  KD = '+self.element+'\n'
@@ -217,9 +226,9 @@ class AlaSys():
                 
             elif self.latt_type == 'bcc':
                 lpc = self.a0 * 0.5
-                ret += '  %.6f   %.6f  -%.6f \n'%(lpc,lpc,lpc)
-                ret += ' -%.6f   %.6f   %.6f \n'%(lpc,lpc,lpc)
+                ret += ' -%.6f   %.6f  %.6f \n'%(lpc,lpc,lpc)
                 ret += '  %.6f  -%.6f   %.6f \n'%(lpc,lpc,lpc)
+                ret += '  %.6f   %.6f  -%.6f \n'%(lpc,lpc,lpc)
                 
             ret += "/\n"
             ret += "\n"
@@ -227,6 +236,8 @@ class AlaSys():
             ret += "&kpoint \n"
             ret += k_path
             ret += '/\n'
+    
+            ret += analysis_extra
     
             file = open( os.path.join(self.DIR, outfile), 'w' )
             file.writelines(ret)

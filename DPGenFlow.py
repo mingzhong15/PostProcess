@@ -205,11 +205,16 @@ class DPGenSys():
                 if not os.path.exists(outdir_ss):
                     os.mkdir( outdir_ss)
 
+                natom = sys.get_natoms()
+                aparam = np.expand_dims(fparam, 0).repeat(natom,axis=0).T
+                    
                 ms.to_deepmd_raw(outdir_ss)
                 np.savetxt( os.path.join(outdir_ss, 'fparam.raw'), fparam)
+                np.savetxt( os.path.join(outdir_ss, 'aparam.raw'), aparam)
 
                 os.chdir(outdir_ss)
                 os.system('mv ./*/*.raw ./')
+                
                 os.system('~/raw_to_set.sh %.d'%(set_numb))
 
             print('Sys.%.3d is done'%(sys_idx))

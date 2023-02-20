@@ -1,6 +1,6 @@
 from Constant import *
 
-const_I = np.sqrt(np.pi/4 / np.log(2))
+sigma2duration = 2 * np.sqrt(2*np.log(2))
 
 def _heat_capacity(X, a1, a2, a3, a4):
     
@@ -38,25 +38,22 @@ class TTMSys():
         elif latt_type == 'fcc':
             cell_atom = 4
                 
-        # unit : 1/m^3
-        self.num_rho = cell_atom /(self.a/m2A)**3       
+        self.num_rho = cell_atom /(self.a/m2A)**3   # [1/m^3]
         
-        # unit : kg/m^3
-        self.rho = self.num_rho * self.mass         
+        self.rho = self.num_rho * self.mass         # [kg/m^3]
         #self.rho_gcc = self.rho * kg2g/(m2cm**3)
         
         print('density %.2f g/cm^3'%(self.rho * kg2g/(m2cm**3)))
         
-    def set_system_size(self, L, mode='free',delta =3.55, min_act = 80):
+    def set_system_size(self, L, mode='free', delta =3.55, min_act = 80):
         
         self.L = L
-        
         #r_verlet = 6.10 + 1.0     # unit: angstrom
         #delta = r_verlet / 2
         
         self.Nx = int(self.L * 10 /self.a ) + 1
-
         self.N_grid = int(L * 10 / delta) +1
+        self.delta = delta
 
         self.boundary_mode = mode
         if self.boundary_mode == 'free':
@@ -64,13 +61,13 @@ class TTMSys():
         elif self.boundary_mode == 'substrate':
             self.N_expand = 2
             
-        print('Lattice : ',self.Nx, delta, '\nGrid for FD :', 
+        print('Lattice : ',self.Nx, self.delta, '\nGrid for FD :', 
               self.N_grid, self.N_grid * self.N_expand)
 
         self.l_surface = int(self.N_grid)
         self.r_surface = int(self.N_grid*2-1) 
 
-        self.coords = np.arange(self.N_grid*self.N_expand) * delta /10 - L
+        self.coords = np.arange(self.N_grid*self.N_expand) * self.delta /10 - L
 
                     
         print('left Surface: %.d \n right Surface: %.d \n'%(self.l_surface, self.r_surface))        
@@ -95,7 +92,8 @@ class TTMSys():
         print('\n from grid %.d to %.d, electronic temperature is initialized at %.1f kelvin \n'%(self.N_grid,self.N_grid*2-1,T_0))
         
         np.savetxt(savedir+'TTM_init.dat',TE_field, delimiter='   ', fmt='%.d')
-        
+
+    
     def _obtain_gamma(self, G0, data, init, const=False):
         
         print('=====================================')
@@ -146,32 +144,59 @@ class TTMSys():
         
         
         return ax
-        
-    def _obtain_laser(self, tau_L, epsilon=0, F_abs=0, is_print=True):
-        # Gaussian width, unit: ps
-        self.sigma = tau_L / np.sqrt(8 * np.log(2))  
+               
+    def _obtain_laser(self, tau_L, skin_layer=10, is_decay=False, epsilon=0, F_abs=0,  is_print=True):
+    
+    # ======================
+    # tau_L [ps], skin_layer [nm], epsilon [J/kg], F [J/m^2]
+    # L     [nm], rho     [kg/m^3],
+    # ======================
 
+        self.sigma = tau_L / sigma2duration                   # [ps]
+        self.skin_layer = int(skin_layer*nm2A/self.delta)     # [int]
         
-        if epsilon !=0 :
-            I_abs_SI = epsilon * self.rho * self.L * nm2A / m2A / np.sqrt(2*np.pi) / self.sigma
-            self.I_abs = I_abs_SI * J2eV / (m2A**2)
-        elif F_abs !=0 :
-            self.I_abs = F_abs / const_I / tau_L * J2eV / (m2A**2)
+        self.is_decay = is_decay
+        decay_factor = self.L / skin_layer / (1 - np.exp( - self.L / skin_layer))
+        
+        
+        fluence2intensity = 1/np.sqrt(2*np.pi)/self.sigma     # [ps^-1]
+        epsilon2fluence   = self.rho * (self.L* nm2A/m2A)           # [kg/m^2]
 
+        if epsilon != 0 :
+            F_abs = epsilon * epsilon2fluence                # [J/m^2] <-- [J/kg] * [kg/m^2]
+     
+        if self.is_decay:
+            self.I_abs = F_abs * fluence2intensity * J2eV/m2A**2 * decay_factor
+        else:
+            self.I_abs = F_abs * fluence2intensity * J2eV/m2A**2 # [eV/A^2/ps] 
+        
         if is_print:
+            if self.is_decay:
+                print('exponential decay with optical peneration depth : %.d grids'%(self.skin_layer))
+            else:
+                print('uniform heating condition')
             print('Intensity (eV/A^2 ps): ', self.I_abs)
             print('laser pulse (ps): ', self.sigma)
 
+    def _set_ele_diff(self, v_fermi, A_temp, B_temp):
+        
+        self.v_fermi = v_fermi
+        self.A_temp = A_temp
+        self.B_temp = B_temp
+            
     def _plot_laser(self):
         t = np.linspace(0, self.sigma*10, 100)
         t_0 = 5 * self.sigma
 
         fig, ax = plt.subplots(figsize=(2,2),dpi=200)
 
-        ax.plot(t * 1e3, self.I_abs * np.exp(-(t-t_0)**2/(2*self.sigma**2)) )#, label='Laser Pulse')
+        pulse = self.I_abs * np.exp(-(t-t_0)**2/(2*self.sigma**2))
+        ax.plot(t * 1e3,  pulse )#, label='Laser Pulse')
 
         ax.axhline(self.I_abs, linestyle=':',color='k')
         ax.axhline(self.I_abs/2, linestyle=':',color='k')
+        
+        #print('FWHM : %.7f ps'%)
 
         ax.set_xlim(0,)
         ax.set_xlabel('Time (fs)')
@@ -247,9 +272,12 @@ class TTMSys():
         temp = 1
         file.writelines('%.1f \n'%temp)      
         
-        file.writelines(' =========== [el_th_diff] =========== # \n')
-        temp = 0.0
-        file.writelines('%.1f \n'%temp)
+        file.writelines(' =========== [v_fermi] (ang/ps)=========== # \n')
+        file.writelines('%.2f \n'%self.v_fermi)   
+        file.writelines(' =========== [A_temp] (K^-2 ps^-1)=========== # \n')
+        file.writelines('%.32f \n'%self.A_temp)  
+        file.writelines(' =========== [B_temp] (K^-1 ps^-1) =========== # \n')
+        file.writelines('%.32f \n'%self.B_temp)          
         
         file.writelines(' =========== [*gamma_0] =========== # \n')
         file.writelines('%.32f \n'%self.gamma_p_metal)             
@@ -278,7 +306,15 @@ class TTMSys():
         file.writelines('%.d \n'%self.r_surface)       
         
         file.writelines(' =========== [*skin_layer] =========== # \n')
-        file.writelines('%.d \n'%(self.r_surface-self.l_surface+1))          
+        #file.writelines('%.d \n'%(self.r_surface-self.l_surface+1))
+        file.writelines('%.d \n'%(self.skin_layer))
+        file.writelines(' =========== [*is_decay] =========== # \n')
+        if self.is_decay:
+            temp = 1
+        else:
+            temp = 0
+        file.writelines('%.d \n'%temp)
+        
         file.writelines(' =========== [*width] =========== # \n')
         file.writelines('%.32f \n'%self.sigma)          
         file.writelines(' =========== [pres_factor] =========== # \n')
@@ -342,19 +378,7 @@ class TTMSys():
         
         print(np.max(self.TE_max))
         
-    def _obtain_laser(self, tau_L, epsilon=0, F_abs=0):
-        # Gaussian width, unit: ps
-        self.sigma = tau_L / np.sqrt(8 * np.log(2))  
-        
-        if epsilon !=0 :
-            I_abs_SI = epsilon * self.rho * self.L * nm2A / m2A / np.sqrt(2*np.pi) / self.sigma
-            self.I_abs = I_abs_SI * J2eV / (m2A**2)
-        elif F_abs !=0 :
-            self.I_abs = F_abs / const_I / tau_L * J2eV / (m2A**2)
 
-        print('Intensity (eV/A^2 ps): ', self.I_abs)
-        print('laser pulse (ps): ', self.sigma)
-        
     def _get_TE_evolution_centroid(self, DELTA):
 
         self.TE_AVE = np.average(self.TE[:, self.l_surface + int(self.N_grid/2) - DELTA : self.l_surface + int(self.N_grid/2) + DELTA], axis=1 )
@@ -415,6 +439,15 @@ class TTMSys():
         self.times = np.arange(self.temps.shape[0])*delta_t
 
         self.X,self.Y = np.meshgrid(self.times, self.coords)
+        
+    def _get_average(self, data):
+        
+        cri = self.ncount >= self.min_act
+        data[cri] = 0
+        
+        mask = np.ma.masked_equal(data, 0)
+        #cri = sys.ncount[:,1:] >= sys.min_act
+        return np.ma.mean(mask, axis=1).data
         
     def _get_centroid(self, data, DELTA):
         center = int((self.l_surface+self.r_surface)/2)

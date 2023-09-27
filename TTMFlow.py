@@ -26,7 +26,7 @@ def _cut_profile(DIR):
     file.close()
     outfile.close()
 
-class TTMSys():
+class TTMMDSys():
     
     def __init__(self, mass_mole, a, latt_type):
         

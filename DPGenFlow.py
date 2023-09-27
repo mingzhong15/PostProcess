@@ -95,20 +95,23 @@ class DPGenSys():
 
         data = self._model_devi(iter_idx, sys_idx , case_idx)
         
-        t,te,p = self._get_PT(iter_idx, sys_idx , case_idx)
         
         ax.plot(data[:,0],data[:,4],'o', mfc='none',mew=0.5,ms=2)
         
         ax.axhline(lo,linestyle='--',lw=0.5,color='k')
         ax.axhline(hi,linestyle='--',lw=0.5,color='k')  
         
-        output = 'T_i = %.d K'%t
-        if show_ele_temp:
-            output += 'T_e = %.d K'%te
-        output += ' p = %.2f GPa, '%p
-        output += self.label_list[sys_idx]
-        
-        ax.set_title(output, fontsize=8)
+        try:
+            t,te,p = self._get_PT(iter_idx, sys_idx , case_idx)
+
+            output = 'T_i = %.d K'%t
+            if show_ele_temp:
+                output += 'T_e = %.d K'%te
+            output += ' p = %.2f GPa, '%p
+            output += self.label_list[sys_idx]
+            ax.set_title(output, fontsize=8)
+        except:
+            pass
 
         ax.set_ylabel('model_devi ($\\rm{eV/\mathring A}$)')
         ax.set_xlabel('timestep')
@@ -141,8 +144,10 @@ class DPGenSys():
 
         count = np.zeros(len(self.confs_list))
         
-        for i in range(self.N_iter-1):
-
+        self.frame_sys = np.zeros(len(self.confs_list))
+        
+        for i in range(self.N_iter):
+            
             for sys_idx in range(len(self.confs_list)):
                 
                 try:
@@ -155,10 +160,44 @@ class DPGenSys():
                     else:
                         self._plot_sampling(ax, iter_idx = i, sys_idx = sys_idx, 
                                            color=color[sys_idx])
+                
+                    self.frame_sys[sys_idx] += self.temps.shape[0]
+                
+                    if self.printf:
+                        output = 'Iter %.6d --- sys. %.3d'%(i, sys_idx)
+                        output += ' %.d frames in total '%self.frame_sys[sys_idx]
+                        
+                        print(output)
+                
                 except:
                     pass        
 
+    def _get_extra(self, iter_idx, sys_idx = 0, str_s='energy  without entropy', save_raw = 'internal.raw'):
+        
+        iter_idx = 'iter.%.6d'%iter_idx
+
+        path = os.path.join(self.dir, iter_idx, '02.fp', 'task.%.3d.*'%sys_idx, 'OUTCAR')
+
+        fp_list = glob.glob( path )
+
+        tmp = []
+        
+        for task_idx in range(len(fp_list)):
             
+            outcar = os.path.join(self.dir, iter_idx, '02.fp', 'task.%.3d.%.6d'%(sys_idx, task_idx), 'OUTCAR')
+        
+            #print(outcar)
+        
+            cmd = "grep '"+str_s+"' " + outcar
+           
+            tmp = np.append(tmp, float(os.popen(cmd).readlines()[0].split()[3]) )
+            
+        save_dir = os.path.join(self.dir, iter_idx, '02.fp', 'data.%.3d'%sys_idx)
+        np.savetxt( os.path.join(save_dir, save_raw), tmp.reshape(-1,1) )
+    
+        print(os.path.join(save_dir, save_raw),' is generated')
+        
+        
     def _obtain_tt_te_sampling(self):
         
         input_list = glob.glob( os.path.join(self.dir, 'iter.*', '01.model_devi', 'task*', 'input.lammps') )
@@ -179,6 +218,7 @@ class DPGenSys():
                 
     def _collect_data_to(self, out_dir, set_numb = 20000, prefix=''):
         
+        
         for sys_idx in range(len(self.label_list)):
 
             
@@ -190,6 +230,7 @@ class DPGenSys():
             if len(file_list) != 0:
 
                 fparam = []
+                internal = []
                 ms = dpdata.MultiSystems()
 
                 for file in file_list:
@@ -197,8 +238,22 @@ class DPGenSys():
                     sys = dpdata.LabeledSystem( file, fmt='deepmd/raw' )
                     ms.append(sys)
 
-                    temps = np.loadtxt( os.path.join(file,'fparam.raw') )
-                    fparam = np.append(fparam, temps)
+                    try:
+                        tmp = np.loadtxt( os.path.join(file,'fparam.raw') )
+                        fparam = np.append(fparam, tmp)
+                        
+                        is_fparam = True
+                        
+                    except:
+                        is_fparam = False
+                        
+                    try:
+                        tmp    = np.loadtxt( os.path.join(file,'internal.raw') )
+                        internal = np.append(internal, tmp)
+                        
+                        is_internal = True
+                    except:
+                        is_internal = False                        
 
                 outdir_ss = os.path.join(out_dir, self.label_list[sys_idx])
 
@@ -209,16 +264,22 @@ class DPGenSys():
                 aparam = np.expand_dims(fparam, 0).repeat(natom,axis=0).T
                     
                 ms.to_deepmd_raw(outdir_ss)
-                np.savetxt( os.path.join(outdir_ss, 'fparam.raw'), fparam)
-                np.savetxt( os.path.join(outdir_ss, 'aparam.raw'), aparam)
-
+                
+                if is_fparam:
+                    np.savetxt( os.path.join(outdir_ss, 'fparam.raw'), fparam)
+                    np.savetxt( os.path.join(outdir_ss, 'aparam.raw'), aparam)
+                
+                    print('NOTE: fparam.raw is generated')
+                if is_internal:
+                    np.savetxt( os.path.join(outdir_ss, 'internal.raw'), internal)
+                    print('NOTE: internal.raw is generated')
+                    
                 os.chdir(outdir_ss)
                 os.system('mv ./*/*.raw ./')
                 
                 os.system('~/raw_to_set.sh %.d'%(set_numb))
 
             print('Sys.%.3d is done'%(sys_idx))
-            
 
     #def _extract_internal_energy(self):
         

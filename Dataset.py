@@ -3,23 +3,49 @@ from Constant import *
 import dpdata
 
 def _get_EOS(raw_dir):
-
+    
     natoms = np.loadtxt(os.path.join(raw_dir, 'type.raw')).shape[0]
 
-    fpar = np.loadtxt(os.path.join(raw_dir, 'fparam.raw'))
-    virials = np.loadtxt(os.path.join(raw_dir, 'virial.raw'))
-    alg = (virials[:,0] + virials[:,4] + virials[:,-1])/3
+    try:
+        energy = np.loadtxt(os.path.join(raw_dir, 'energy.raw'))
+        
+        virials = np.loadtxt(os.path.join(raw_dir, 'virial.raw'))
+        alg = (virials[:,0] + virials[:,4] + virials[:,-1])/3
 
-    # Angstrom^3
-    box = np.loadtxt(os.path.join(raw_dir, 'box.raw'))
-    vol = np.linalg.det(box.reshape(-1,3,3))
+        # Angstrom^3
+        box = np.loadtxt(os.path.join(raw_dir, 'box.raw'))
+        vol = np.linalg.det(box.reshape(-1,3,3))
 
-    therm_term = natoms/vol * kb * fpar * (m2A**3) *1e-9
+        press =  alg/vol  /J2eV * (m2A**3) *1e-9
+        try:
+            fpar = np.loadtxt(os.path.join(raw_dir, 'fparam.raw'))
+            therm_term = natoms/vol * kb * fpar * (m2A**3) *1e-9
 
-    press = therm_term + alg/vol  /J2eV * (m2A**3) *1e-9
-
-    energy = np.loadtxt(os.path.join(raw_dir, 'energy.raw'))
+            press += therm_term
+        except:
+            fpar = np.ones(energy.shape) * 0
+        
+        
+    except:
+        energy = np.load(os.path.join(raw_dir,'set.000', 'energy.npy'))
     
+        virials = np.load(os.path.join(raw_dir, 'set.000', 'virial.npy'))
+        alg = (virials[:,0] + virials[:,4] + virials[:,-1])/3
+
+        # Angstrom^3
+        box = np.load(os.path.join(raw_dir,'set.000',  'box.npy'))
+        vol = np.linalg.det(box.reshape(-1,3,3))
+
+        press =  alg/vol  /J2eV * (m2A**3) *1e-9
+        try:
+            fpar = np.loadtxt(os.path.join(raw_dir,'set.000', 'fparam.npy'))
+            therm_term = natoms/vol * kb * fpar * (m2A**3) *1e-9
+
+            press += therm_term
+        except:
+            fpar = np.ones(energy.shape) * 0
+        
+        
     return fpar, press, vol/natoms, energy/natoms, natoms
 
 class SingleSys():

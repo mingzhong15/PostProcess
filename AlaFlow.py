@@ -12,6 +12,10 @@ class AlaSys():
             self.natoms_uc = 4
         elif latt_type == 'bcc':
             self.natoms_uc = 2
+        elif latt_type == 'b1':
+            self.natoms_uc = 8
+        elif latt_type == 'b2':
+            self.natoms_uc = 2
         
         self.a0 = a0
         self.mass_mole = mass_mole
@@ -47,10 +51,51 @@ class AlaSys():
 
         if in_type == 'minimize':
             # ======= geometric ====== #
-            ret+='lattice         '+self.latt_type+' %.3f\n'%self.a0
-            ret+='region          box block 0 1 0 1 0 1 units lattice\n'
-            ret+='create_box      1 box\n'
-            ret+='create_atoms    1 box\n'
+            
+            if self.latt_type in ['bcc','fcc']:
+                ret+='lattice         '+self.latt_type+' %.3f\n'%self.a0
+                
+                ret+='region          box block 0 1 0 1 0 1 units lattice\n'
+                ret+='create_box      1 box\n'           
+                ret+='create_atoms    1 box\n'
+                
+            elif self.latt_type == 'b1':
+                
+                ret+='variable        a equal %.11f\n'%self.a0
+                ret+='lattice         custom    1.0     &\n'
+                ret+='                a1      $a       0.0     0.0     &\n'
+                ret+='                a2      0.0      $a      0.0     &\n'
+                ret+='                a3      0.0      0.0     $a      &\n'
+                ret+='                basis   0.5      0.0     0.0     &\n'
+                ret+='                basis   0.0      0.5     0.0     &\n'
+                ret+='                basis   0.0      0.0     0.5     &\n'
+                ret+='                basis   0.5      0.5     0.5     &\n'
+                ret+='                basis   0.0      0.0     0.0     &\n'
+                ret+='                basis   0.0      0.5     0.5     &\n'
+                ret+='                basis   0.5      0.0     0.5     &\n'
+                ret+='                basis   0.5      0.5     0.0 \n'
+            
+                ret+='region          box block 0 1 0 1 0 1 units lattice\n'
+                ret+='create_box      1 box\n'           
+                ret+='create_atoms    1 box &\n'           
+                ret+='                basis   1   1   basis   2  1   basis   3  1   basis   4  1   &&\n'
+                ret+='                basis   5   2   basis   6  2   basis   7  2   basis   8  2\n'
+
+            elif self.latt_type == 'b2':
+                
+                ret+='variable        a equal %.11f\n'%self.a0
+                ret+='lattice         custom    1.0     &\n'
+                ret+='                a1      $a       0.0     0.0     &\n'
+                ret+='                a2      0.0      $a      0.0     &\n'
+                ret+='                a3      0.0      0.0     $a      &\n'
+                ret+='                basis   0.5      0.5     0.5     &\n'
+                ret+='                basis   0.0      0.0     0.0     \n'
+                
+                ret+='region          box block 0 1 0 1 0 1 units lattice\n'
+                ret+='create_box      1 box\n'           
+                ret+='create_atoms    1 box &\n' 
+                ret+='                basis   1   1   basis   2  2\n'
+            
             ret+='replicate       %.d %.d %.d\n'%(nx,nx,nx)
             ret+='\n'
             
@@ -70,7 +115,14 @@ class AlaSys():
                 ret+='pair_style      deepmd '+model_file+' aparam %.d \n'%aparam
             
             ret+='pair_coeff      * *\n'
-            ret+='mass            1 %.2f\n'%self.mass_mole
+            
+            if len(self.mass_mole) > 1:
+                
+                for idx, mass in enumerate(self.mass_mole):
+                    ret+='mass            %.d %.2f\n'%(idx+1, mass)
+                
+            else:
+                ret+='mass            1 %.2f\n'%self.mass_mole
 
         elif model_type == 'eam':
             ret+='pair_style      eam/alloy\n'
@@ -115,11 +167,11 @@ class AlaSys():
         file.writelines(ret)
         file.close()
 
-    def _run_minimize(self, output_poscar=False):
+    def _run_minimize(self, np = 1, output_poscar=False):
 
         os.chdir(self.DIR)
         
-        os.system('mpirun -np 32 '+self.LAMMPS+' -i in.minimize')
+        os.system('mpirun -np %.d '%np+self.LAMMPS+' -i in.minimize')
 
         # =================== #
         # generate coord_scale for alm_input
@@ -183,8 +235,22 @@ class AlaSys():
         ret += generatal_extra
         
         
-        ret += '  NKD = 1\n'
-        ret += '  KD = '+self.element+'\n'
+        if len(self.mass_mole) > 1:
+            
+            ret += '  NKD = %.d\n'%len(self.mass_mole)    
+            ele_list = ''
+            
+            for idx in range(len(self.mass_mole)):
+                
+                ele_list += self.element[idx] + ' '
+                
+            ret += '  KD = '+ele_list+'\n
+                
+            else:
+                ret += '  NKD = 1\n'
+                ret += '  KD = '+self.element+'\n'
+                
+                
         ret += '/\n'
         ret += '\n'
 
@@ -342,7 +408,7 @@ class AlaSys():
             os.system(cmd)   
         
             
-    def _cal_pattern(self, np = 28, sbatch_title=''):
+    def _cal_pattern(self, np = 1, sbatch_title=''):
 
         prt = '=======================================\n'
         prt += 'Force calculation : '+self.pattern_type+'\n'
@@ -390,7 +456,7 @@ class AlaSys():
                 print(cmd)
                 os.system(cmd)
                 
-                sbatch_title += 'mpirun --np %d '%np+self.VASP+'\n'
+                sbatch_title += 'mpirun --np %.d '%np+self.VASP+'\n'
                 sbatch_title +='mv vasprun.xml ../vasprun_'+pp+'.xml\n'
 
                 print(sbatch_title)
